@@ -12,6 +12,10 @@ public class User : BaseEntity
     public string? Bio { get; set; }
     public UserRole Role { get; set; } = UserRole.Student;
     public bool IsVerified { get; set; } = false;
+    // JWT Refresh Token
+    public string? RefreshToken { get; set; }
+    public DateTime? RefreshTokenExpiresAt { get; set; }
+
 
     // Navigation
     public ICollection<Enrollment> Enrollments { get; set; } = new List<Enrollment>();

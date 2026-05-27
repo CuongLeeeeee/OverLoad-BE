@@ -47,4 +47,6 @@ public class UserRepository : BaseRepository<User>, IUserRepository
         var items = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
         return (items, total);
     }
+    public async Task<User?> GetByRefreshTokenAsync(string refreshToken)
+    => await _dbSet.FirstOrDefaultAsync(u => u.RefreshToken == refreshToken);
 }
