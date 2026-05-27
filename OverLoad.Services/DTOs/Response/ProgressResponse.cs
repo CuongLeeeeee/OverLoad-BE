@@ -1,11 +1,16 @@
+// OverLoad.Services/DTOs/Response/ProgressResponse.cs
 namespace OverLoad.Services.DTOs.Response;
 
 public class ProgressResponse
 {
     public int Id { get; set; }
     public int UserId { get; set; }
+    public string UserFullName { get; set; } = string.Empty;
+    public string UserEmail { get; set; } = string.Empty;
     public int LessonId { get; set; }
     public string LessonTitle { get; set; } = string.Empty;
+    public int CourseId { get; set; }
+    public string CourseTitle { get; set; } = string.Empty;
     public decimal LastScrollPercentage { get; set; }
     public int UnlockedCheckpointIndex { get; set; }
     public bool Completed { get; set; }

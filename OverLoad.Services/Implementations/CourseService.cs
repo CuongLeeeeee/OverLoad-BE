@@ -110,7 +110,24 @@ public class CourseService : ICourseService
         await _courseRepository.DeleteAsync(id);
         return ApiResponse<bool>.SuccessResult(true, "Course deleted successfully.");
     }
+    public async Task<PagedResponse<CourseResponse>> GetByCategoryAsync(
+    string category, int page = 1, int pageSize = 10)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
 
+        var (items, total) = await _courseRepository.SearchAsync(
+            searchTerm: null,
+            category: category,   // <-- truyền category vào đây
+            level: null,
+            isPublished: true,    // thường chỉ trả published
+            page, pageSize,
+            sortBy: "createdAt",
+            sortDesc: true);
+
+        return PagedResponse<CourseResponse>.SuccessResult(
+            items.Select(MapToResponse), total, page, pageSize);
+    }
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static string GenerateSlug(string title)

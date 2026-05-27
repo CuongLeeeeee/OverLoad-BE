@@ -11,6 +11,7 @@ public class Course : BaseEntity
     public string? ThumbnailUrl { get; set; }
     public string? Category { get; set; }
     public CourseLevel Level { get; set; } = CourseLevel.Beginner;
+    public decimal Price { get; set; } = 0;
     public bool IsPublished { get; set; } = false;
     public int TotalDurationMinutes { get; set; }
     public int TotalLessons { get; set; }

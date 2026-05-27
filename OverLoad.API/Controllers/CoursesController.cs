@@ -96,4 +96,16 @@ public class CoursesController : ControllerBase
         if (!result.Success) return NotFound(result);
         return Ok(result);
     }
+
+    /// <summary>Get courses by category.</summary>
+    [HttpGet("category/{category}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetByCategory(
+        string category,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10)
+    {
+        var result = await _courseService.GetByCategoryAsync(category, page, pageSize);
+        return Ok(result);
+    }
 }
