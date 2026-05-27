@@ -1,0 +1,54 @@
+# ======================
+# .NET / ASP.NET Core
+# ======================
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Build results
+*.dll
+*.exe
+*.app
+*.log
+
+# Visual Studio
+.vs/
+.vscode/
+*.dbmdl
+
+# ======================
+# Docker
+# ======================
+**/.docker/
+**/docker-compose.override.yml.local
+docker-compose.override.yml.local
+
+db_data/
+*.sql-journal
+
+# ======================
+# Logs & temp
+# ======================
+*.log
+logs/
+temp/
+tmp/
+
+# ======================
+# Secrets
+# ======================
+*.env
+.env.*
+secrets.json
+appsettings.json
+appsettings.Development.json
+# ======================
+# OS specific
+# ======================
+# Mac
+.DS_Store
+# Windows
+Thumbs.db
