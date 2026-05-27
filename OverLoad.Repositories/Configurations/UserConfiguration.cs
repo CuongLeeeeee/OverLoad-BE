@@ -17,6 +17,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.AvatarUrl).HasMaxLength(500);
         builder.Property(u => u.Bio).HasMaxLength(1000);
         builder.Property(u => u.Role).HasConversion<string>();
+        builder.Property(u => u.RefreshToken).HasMaxLength(500);
 
         builder.HasMany(u => u.Enrollments)
                .WithOne(e => e.User)

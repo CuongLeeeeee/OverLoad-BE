@@ -5,7 +5,7 @@ using OverLoad.Services.Common;
 using OverLoad.Services.DTOs.Request;
 using OverLoad.Services.DTOs.Response;
 using OverLoad.Services.Interfaces;
-
+using BCrypt.Net;
 namespace OverLoad.Services.Implementations;
 
 public class UserService : IUserService
@@ -49,7 +49,7 @@ public class UserService : IUserService
         var user = new User
         {
             Email = request.Email.Trim().ToLower(),
-            PasswordHash = BCryptHash(request.Password),
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
             FullName = request.FullName.Trim(),
             AvatarUrl = request.AvatarUrl,
             Bio = request.Bio,
@@ -127,7 +127,5 @@ public class UserService : IUserService
         }).ToList()
     };
 
-    // Simple BCrypt-style placeholder (replace with BCrypt.Net-Next in production)
-    private static string BCryptHash(string password)
-        => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"hashed_{password}"));
+    
 }
