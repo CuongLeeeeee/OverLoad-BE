@@ -1,15 +1,24 @@
+using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OverLoad.API.Common;
+using OverLoad.API.Extensions;
+using OverLoad.Services.Common;
 using OverLoad.Services.DTOs.Request;
-using OverLoad.Services.Implementations;
+using OverLoad.Services.DTOs.Response;
 using OverLoad.Services.Interfaces;
 
 namespace OverLoad.API.Controllers;
 
-/// <summary>Manage courses on the platform.</summary>
+/// <summary>
+/// Course catalogue. Reading is public (draft courses are visible to staff only);
+/// writing is limited to Admin and Instructor.
+/// </summary>
 [ApiController]
-[Route("api/[controller]")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/courses")]
 [Produces("application/json")]
+[Authorize]
 public class CoursesController : ControllerBase
 {
     private readonly ICourseService _courseService;
@@ -17,126 +26,91 @@ public class CoursesController : ControllerBase
     private readonly IEnrollmentService _enrollmentService;
 
     public CoursesController(
-    ICourseService courseService,
-    ILessonService lessonService,
-    IEnrollmentService enrollmentService)
+        ICourseService courseService,
+        ILessonService lessonService,
+        IEnrollmentService enrollmentService)
     {
         _courseService = courseService;
         _lessonService = lessonService;
         _enrollmentService = enrollmentService;
     }
 
-    /// <summary>Get a paginated list of courses with filtering and sorting.</summary>
+    /// <summary>Paginated list of courses with filtering and sorting.</summary>
     [HttpGet]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetAll([FromQuery] CourseQueryParams query)
-        => Ok(await _courseService.GetAllAsync(query));
+    [AllowAnonymous]
+    public async Task<ActionResult<ApiResponse<PagedResult<CourseResponse>>>> GetAll([FromQuery] CourseQueryParams query)
+        => Ok(ApiResponse<PagedResult<CourseResponse>>.Ok(await _courseService.GetAllAsync(query, User.IsStaff())));
 
-    /// <summary>Get a single course by ID, including its lessons.</summary>
+    /// <summary>Published courses of one category.</summary>
+    [HttpGet("category/{category}")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ApiResponse<PagedResult<CourseResponse>>>> GetByCategory(
+        string category, [FromQuery] CourseQueryParams query)
+    {
+        query.Category = category;
+        return Ok(ApiResponse<PagedResult<CourseResponse>>.Ok(
+            await _courseService.GetAllAsync(query, includeUnpublished: false)));
+    }
+
+    /// <summary>A single course by ID, including its lesson outline.</summary>
     [HttpGet("{id:int}")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetById(int id)
-    {
-        var result = await _courseService.GetByIdAsync(id);
-        if (!result.Success) return NotFound(result);
-        return Ok(result);
-    }
+    public async Task<ActionResult<ApiResponse<CourseDetailResponse>>> GetById(int id)
+        => Ok(ApiResponse<CourseDetailResponse>.Ok(await _courseService.GetByIdAsync(id, User.IsStaff())));
 
-    /// <summary>Get a course by its URL slug.</summary>
+    /// <summary>A course by its URL slug.</summary>
     [HttpGet("slug/{slug}")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetBySlug(string slug)
-    {
-        var result = await _courseService.GetBySlugAsync(slug);
-        if (!result.Success) return NotFound(result);
-        return Ok(result);
-    }
+    public async Task<ActionResult<ApiResponse<CourseDetailResponse>>> GetBySlug(string slug)
+        => Ok(ApiResponse<CourseDetailResponse>.Ok(await _courseService.GetBySlugAsync(slug, User.IsStaff())));
 
-    /// <summary>Get all lessons of a course with progress if authenticated.</summary>
+    /// <summary>Lessons of a course with lock state, plus the caller's progress when signed in.</summary>
     [HttpGet("{id:int}/lessons")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetLessons(int id)
-    {
-        int? userId = null;
-        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)
-                       ?? User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub);
+    public async Task<ActionResult<ApiResponse<List<LessonProgressResponse>>>> GetLessons(int id)
+        => Ok(ApiResponse<List<LessonProgressResponse>>.Ok(
+            await _lessonService.GetByCourseIdWithProgressAsync(id, User.FindUserId(), User.IsStaff())));
 
-        if (userIdClaim != null && int.TryParse(userIdClaim.Value, out var parsedId))
-            userId = parsedId;
-
-        var result = await _lessonService.GetByCourseIdWithProgressAsync(id, userId);
-        if (!result.Success) return NotFound(result);
-        return Ok(result);
-    }
-
-    /// <summary>Create a new course. Slug is auto-generated from title.</summary>
-    [HttpPost]
+    /// <summary>Enroll the signed-in user in a free course. Paid courses go through /payment.</summary>
+    [HttpPost("{id:int}/enroll")]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> Create([FromBody] CreateCourseRequest request)
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<ApiResponse<EnrollmentResponse>>> Enroll(int id)
     {
-        if (!ModelState.IsValid) return BadRequest(ModelState);
-
-        var result = await _courseService.CreateAsync(request);
-        if (!result.Success) return BadRequest(result);
-        return CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, result);
+        var enrollment = await _enrollmentService.SelfEnrollAsync(User.GetUserId(), id);
+        return StatusCode(StatusCodes.Status201Created,
+            ApiResponse<EnrollmentResponse>.Ok(enrollment, "Enrolled successfully."));
     }
 
-    /// <summary>Update an existing course.</summary>
+    /// <summary>Create a course. The slug is generated from the title.</summary>
+    [HttpPost]
+    [Authorize(Roles = Roles.Staff)]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    public async Task<ActionResult<ApiResponse<CourseResponse>>> Create([FromBody] CreateCourseRequest request)
+    {
+        var created = await _courseService.CreateAsync(request);
+        return CreatedAtAction(nameof(GetById), new { id = created.Id },
+            ApiResponse<CourseResponse>.Ok(created, "Course created successfully."));
+    }
+
+    /// <summary>Update a course.</summary>
     [HttpPut("{id:int}")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [Authorize(Roles = Roles.Staff)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Update(int id, [FromBody] UpdateCourseRequest request)
-    {
-        if (!ModelState.IsValid) return BadRequest(ModelState);
-
-        var result = await _courseService.UpdateAsync(id, request);
-        if (!result.Success)
-            return result.Message.Contains("not found") ? NotFound(result) : BadRequest(result);
-        return Ok(result);
-    }
+    public async Task<ActionResult<ApiResponse<CourseResponse>>> Update(int id, [FromBody] UpdateCourseRequest request)
+        => Ok(ApiResponse<CourseResponse>.Ok(await _courseService.UpdateAsync(id, request), "Course updated successfully."));
 
     /// <summary>Delete a course and all its lessons.</summary>
     [HttpDelete("{id:int}")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [Authorize(Roles = Roles.Staff)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Delete(int id)
+    public async Task<ActionResult<ApiResponse<object?>>> Delete(int id)
     {
-        var result = await _courseService.DeleteAsync(id);
-        if (!result.Success) return NotFound(result);
-        return Ok(result);
-    }
-
-    /// <summary>Get courses by category.</summary>
-    [HttpGet("category/{category}")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetByCategory(
-        string category,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10)
-    {
-        var result = await _courseService.GetByCategoryAsync(category, page, pageSize);
-        return Ok(result);
-    }
-    [HttpGet("{courseId:int}/progress")]
-    [Authorize]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetCourseProgress(int courseId)
-    {
-        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)
-                       ?? User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub);
-
-        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
-            return Unauthorized(new { success = false, message = "Invalid token." });
-
-        var result = await _enrollmentService.GetCourseProgressAsync(userId, courseId);
-        if (!result.Success) return NotFound(result);
-        return Ok(result);
+        await _courseService.DeleteAsync(id);
+        return Ok(ApiResponse.Ok("Course deleted successfully."));
     }
 }

@@ -1,17 +1,36 @@
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Asp.Versioning;
+using FluentValidation;
+using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using OverLoad.API.Common;
 using OverLoad.API.Middleware;
+using OverLoad.API.Validators;
 using OverLoad.Repositories.Data;
 using OverLoad.Repositories.Implementations;
 using OverLoad.Repositories.Interfaces;
 using OverLoad.Services.Implementations;
 using OverLoad.Services.Interfaces;
-using System.Text;
+using OverLoad.Services.Settings;
 using PayOS;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// ── Settings (Options pattern) ────────────────────────────────────────────────
+// Values come from appsettings.json, user-secrets or environment variables (e.g. Jwt__SecretKey).
+builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection(JwtSettings.SectionName));
+builder.Services.Configure<GeminiSettings>(builder.Configuration.GetSection(GeminiSettings.SectionName));
+builder.Services.Configure<PayOSSettings>(builder.Configuration.GetSection(PayOSSettings.SectionName));
+
+var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>() ?? new JwtSettings();
+if (string.IsNullOrWhiteSpace(jwtSettings.SecretKey))
+    throw new InvalidOperationException("Jwt:SecretKey is not configured.");
 
 // ── Database ─────────────────────────────────────────────────────────────────
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -34,11 +53,6 @@ builder.Services.AddScoped<IEnrollmentService, EnrollmentService>();
 builder.Services.AddScoped<IProgressService, ProgressService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
-// ── JWT Authentication ────────────────────────────────────────────────────────
-var jwtKey = builder.Configuration["Jwt:SecretKey"]
-    ?? throw new InvalidOperationException("Jwt:SecretKey is not configured.");
-var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "OverLoadAPI";
-var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "OverLoadClient";
 
 // HttpClient cho Gemini
 builder.Services.AddHttpClient<IChatService, GeminiChatService>(client =>
@@ -46,6 +60,15 @@ builder.Services.AddHttpClient<IChatService, GeminiChatService>(client =>
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 
+// ── PayOS Client ─────────────────────────────────────────────────────────────
+// PAYOS_* environment variables are still honoured as a fallback for existing deployments.
+var payOs = builder.Configuration.GetSection(PayOSSettings.SectionName).Get<PayOSSettings>() ?? new PayOSSettings();
+builder.Services.AddSingleton(new PayOSClient(
+    NonEmptyOr(payOs.ClientId, Environment.GetEnvironmentVariable("PAYOS_CLIENT_ID")),
+    NonEmptyOr(payOs.ApiKey, Environment.GetEnvironmentVariable("PAYOS_API_KEY")),
+    NonEmptyOr(payOs.ChecksumKey, Environment.GetEnvironmentVariable("PAYOS_CHECKSUM_KEY"))));
+
+// ── JWT Authentication ────────────────────────────────────────────────────────
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -56,27 +79,73 @@ builder.Services.AddAuthentication(options =>
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
-        ValidIssuer = jwtIssuer,
+        ValidIssuer = jwtSettings.Issuer,
         ValidateAudience = true,
-        ValidAudience = jwtAudience,
+        ValidAudience = jwtSettings.Audience,
         ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.SecretKey)),
         ValidateLifetime = true,
         ClockSkew = TimeSpan.Zero
+    };
+
+    // 401/403 produced by [Authorize] use the same ApiResponse envelope as the rest of the API.
+    options.Events = new JwtBearerEvents
+    {
+        OnChallenge = async context =>
+        {
+            context.HandleResponse();
+            await WriteEnvelopeAsync(context.Response, StatusCodes.Status401Unauthorized,
+                "Authentication is required to access this resource.");
+        },
+        OnForbidden = context => WriteEnvelopeAsync(context.Response, StatusCodes.Status403Forbidden,
+            "You do not have permission to access this resource.")
     };
 });
 
 builder.Services.AddAuthorization();
 
-// ── PayOS Client ─────────────────────────────────────────────────────────────
-var payOsClientId = builder.Configuration["PayOS:ClientId"] ?? Environment.GetEnvironmentVariable("PAYOS_CLIENT_ID") ?? string.Empty;
-var payOsApiKey = builder.Configuration["PayOS:ApiKey"] ?? Environment.GetEnvironmentVariable("PAYOS_API_KEY") ?? string.Empty;
-var payOsChecksumKey = builder.Configuration["PayOS:ChecksumKey"] ?? Environment.GetEnvironmentVariable("PAYOS_CHECKSUM_KEY") ?? string.Empty;
-
-builder.Services.AddSingleton(new PayOSClient(payOsClientId, payOsApiKey, payOsChecksumKey));
-
 // ── Controllers ───────────────────────────────────────────────────────────────
-builder.Services.AddControllers();
+// Enums travel over JSON as their names ("Beginner"), not their numeric values.
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    })
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        // Model-binding and FluentValidation failures come back in the ApiResponse envelope
+        // instead of the framework's ProblemDetails shape.
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var errors = context.ModelState
+                .Where(entry => entry.Value?.Errors.Count > 0)
+                .SelectMany(entry => entry.Value!.Errors.Select(error =>
+                    string.IsNullOrWhiteSpace(entry.Key)
+                        ? error.ErrorMessage
+                        : $"{entry.Key}: {error.ErrorMessage}"))
+                .ToList();
+
+            return new BadRequestObjectResult(ApiResponse.Fail("Validation failed.", errors));
+        };
+    });
+
+// ── FluentValidation ──────────────────────────────────────────────────────────
+builder.Services.AddFluentValidationAutoValidation();
+builder.Services.AddValidatorsFromAssemblyContaining<RegisterRequestValidator>();
+
+// ── API versioning: /api/v1/... ───────────────────────────────────────────────
+builder.Services.AddApiVersioning(options =>
+{
+    options.DefaultApiVersion = new ApiVersion(1, 0);
+    options.AssumeDefaultVersionWhenUnspecified = true;
+    options.ReportApiVersions = true;
+    options.ApiVersionReader = new UrlSegmentApiVersionReader();
+})
+.AddApiExplorer(options =>
+{
+    options.GroupNameFormat = "'v'VVV";
+    options.SubstituteApiVersionInUrl = true;
+});
 
 // ── Swagger / OpenAPI ─────────────────────────────────────────────────────────
 builder.Services.AddEndpointsApiExplorer();
@@ -104,28 +173,25 @@ builder.Services.AddSwaggerGen(options =>
     });
 
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
-{
     {
-        new OpenApiSecurityScheme
         {
-            Reference = new OpenApiReference
+            new OpenApiSecurityScheme
             {
-                Type = ReferenceType.SecurityScheme,
-                Id   = "Bearer"
-            }
-        },
-        Array.Empty<string>()
-    }
-});
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id   = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
 
     // Include XML comments if present
     var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
     var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
     if (File.Exists(xmlPath))
         options.IncludeXmlComments(xmlPath);
-
-    // Group tags
-    options.TagActionsBy(api => new[] { api.GroupName ?? api.ActionDescriptor.RouteValues["controller"] });
 });
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
@@ -146,6 +212,7 @@ if (app.Environment.IsDevelopment())
         c.RoutePrefix = string.Empty; // Swagger at root
         c.DocumentTitle = "OverLoad API";
         c.DefaultModelsExpandDepth(-1); // Hide schema section by default
+        c.EnablePersistAuthorization();
     });
 }
 
@@ -154,6 +221,10 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+// Health check for CI/CD smoke tests and load balancers
+app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
+   .AllowAnonymous();
 
 // ── Auto-migrate on startup (dev only) ────────────────────────────────────────
 if (app.Environment.IsDevelopment())
@@ -164,3 +235,18 @@ if (app.Environment.IsDevelopment())
 }
 
 app.Run();
+
+static string NonEmptyOr(string value, string? fallback) =>
+    string.IsNullOrWhiteSpace(value) ? fallback ?? string.Empty : value;
+
+static Task WriteEnvelopeAsync(HttpResponse response, int statusCode, string message)
+{
+    response.StatusCode = statusCode;
+    response.ContentType = "application/json";
+    return response.WriteAsync(JsonSerializer.Serialize(
+        ApiResponse.Fail(message),
+        new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+}
+
+// Exposed so the integration tests can reference the entry point through WebApplicationFactory.
+public partial class Program { }

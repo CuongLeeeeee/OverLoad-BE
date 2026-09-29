@@ -28,7 +28,7 @@ public class LessonRepository : BaseRepository<Lesson>, ILessonRepository
     public async Task<(IEnumerable<Lesson> Items, int TotalCount)> SearchAsync(
         int? courseId, string? searchTerm, bool? isFree, int page, int pageSize, string? sortBy, bool sortDesc)
     {
-        var query = _dbSet.AsQueryable();
+        var query = _dbSet.Include(l => l.Course).AsQueryable();
 
         if (courseId.HasValue)
             query = query.Where(l => l.CourseId == courseId.Value);

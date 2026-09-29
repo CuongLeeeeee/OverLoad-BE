@@ -1,11 +1,11 @@
 using OverLoad.Domain.Entities;
-using OverLoad.Domain.Enums;
 using OverLoad.Repositories.Interfaces;
 using OverLoad.Services.Common;
 using OverLoad.Services.DTOs.Request;
 using OverLoad.Services.DTOs.Response;
+using OverLoad.Services.Exceptions;
 using OverLoad.Services.Interfaces;
-using BCrypt.Net;
+
 namespace OverLoad.Services.Implementations;
 
 public class UserService : IUserService
@@ -17,81 +17,82 @@ public class UserService : IUserService
         _userRepository = userRepository;
     }
 
-    public async Task<ApiResponse<UserDetailResponse>> GetByIdAsync(int id)
+    public async Task<PagedResult<UserResponse>> GetAllAsync(UserQueryParams query)
     {
-        var user = await _userRepository.GetWithEnrollmentsAsync(id);
-        if (user == null)
-            return ApiResponse<UserDetailResponse>.FailResult("User not found.");
-
-        return ApiResponse<UserDetailResponse>.SuccessResult(MapToDetailResponse(user));
-    }
-
-    public async Task<PagedResponse<UserResponse>> GetAllAsync(UserQueryParams query)
-    {
-        query.Page = Math.Max(1, query.Page);
-        query.PageSize = Math.Clamp(query.PageSize, 1, 100);
-
+        var (sortBy, sortDesc) = query.ParseSort();
         var (items, total) = await _userRepository.SearchAsync(
-            query.Search, query.Role, query.Page, query.PageSize, query.SortBy, query.SortDesc);
+            query.Search, query.Role?.ToString(), query.PageNumber, query.PageSize, sortBy, sortDesc);
 
-        return PagedResponse<UserResponse>.SuccessResult(
-            items.Select(MapToResponse), total, query.Page, query.PageSize);
+        return PagedResult<UserResponse>.Create(items.Select(MapToResponse), total, query);
     }
 
-    public async Task<ApiResponse<UserResponse>> CreateAsync(CreateUserRequest request)
+    public async Task<UserDetailResponse> GetByIdAsync(int id)
     {
-        if (await _userRepository.EmailExistsAsync(request.Email))
-            return ApiResponse<UserResponse>.FailResult("Email already in use.", "Duplicate email address.");
+        var user = await _userRepository.GetWithEnrollmentsAsync(id)
+            ?? throw new NotFoundException("User", id);
 
-        if (!Enum.TryParse<UserRole>(request.Role, true, out var role))
-            return ApiResponse<UserResponse>.FailResult("Invalid role specified.", $"Role '{request.Role}' is not valid.");
+        return MapToDetailResponse(user);
+    }
+
+    public async Task<UserResponse> CreateAsync(CreateUserRequest request)
+    {
+        if (await _userRepository.EmailExistsAsync(request.Email.Trim().ToLowerInvariant()))
+            throw new ConflictException("An account with this email already exists.");
 
         var user = new User
         {
-            Email = request.Email.Trim().ToLower(),
+            Email = request.Email.Trim().ToLowerInvariant(),
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
             FullName = request.FullName.Trim(),
             AvatarUrl = request.AvatarUrl,
             Bio = request.Bio,
-            Role = role,
+            Role = request.Role,
             IsVerified = false
         };
 
         var created = await _userRepository.AddAsync(user);
-        return ApiResponse<UserResponse>.SuccessResult(MapToResponse(created), "User created successfully.");
+        return MapToResponse(created);
     }
 
-    public async Task<ApiResponse<UserResponse>> UpdateAsync(int id, UpdateUserRequest request)
+    public async Task<UserResponse> UpdateAsync(int id, UpdateUserRequest request)
     {
-        var user = await _userRepository.GetByIdAsync(id);
-        if (user == null)
-            return ApiResponse<UserResponse>.FailResult("User not found.");
-
-        if (!Enum.TryParse<UserRole>(request.Role, true, out var role))
-            return ApiResponse<UserResponse>.FailResult("Invalid role specified.", $"Role '{request.Role}' is not valid.");
+        var user = await _userRepository.GetByIdAsync(id)
+            ?? throw new NotFoundException("User", id);
 
         user.FullName = request.FullName.Trim();
         user.AvatarUrl = request.AvatarUrl;
         user.Bio = request.Bio;
         user.IsVerified = request.IsVerified;
-        user.Role = role;
+        user.Role = request.Role;
 
         await _userRepository.UpdateAsync(user);
-        return ApiResponse<UserResponse>.SuccessResult(MapToResponse(user), "User updated successfully.");
+        return MapToResponse(user);
     }
 
-    public async Task<ApiResponse<bool>> DeleteAsync(int id)
+    public async Task<UserResponse> UpdateProfileAsync(int id, UpdateProfileRequest request)
+    {
+        var user = await _userRepository.GetByIdAsync(id)
+            ?? throw new NotFoundException("User", id);
+
+        user.FullName = request.FullName.Trim();
+        user.AvatarUrl = request.AvatarUrl;
+        user.Bio = request.Bio;
+
+        await _userRepository.UpdateAsync(user);
+        return MapToResponse(user);
+    }
+
+    public async Task DeleteAsync(int id)
     {
         if (!await _userRepository.ExistsAsync(id))
-            return ApiResponse<bool>.FailResult("User not found.");
+            throw new NotFoundException("User", id);
 
         await _userRepository.DeleteAsync(id);
-        return ApiResponse<bool>.SuccessResult(true, "User deleted successfully.");
     }
 
     // ── Mapping helpers ──────────────────────────────────────────────────────
 
-    private static UserResponse MapToResponse(User user) => new()
+    internal static UserResponse MapToResponse(User user) => new()
     {
         Id = user.Id,
         Email = user.Email,
@@ -126,6 +127,4 @@ public class UserService : IUserService
             LastAccessedAt = e.LastAccessedAt
         }).ToList()
     };
-
-    
 }
