@@ -3,6 +3,7 @@ using OverLoad.Repositories.Interfaces;
 using OverLoad.Services.Common;
 using OverLoad.Services.DTOs.Request;
 using OverLoad.Services.DTOs.Response;
+using OverLoad.Services.Exceptions;
 using OverLoad.Services.Interfaces;
 
 namespace OverLoad.Services.Implementations;
@@ -13,11 +14,12 @@ public class EnrollmentService : IEnrollmentService
     private readonly IUserRepository _userRepository;
     private readonly ICourseRepository _courseRepository;
     private readonly IUserLessonProgressRepository _progressRepository;
+
     public EnrollmentService(
-    IEnrollmentRepository enrollmentRepository,
-    IUserRepository userRepository,
-    ICourseRepository courseRepository,
-    IUserLessonProgressRepository progressRepository)
+        IEnrollmentRepository enrollmentRepository,
+        IUserRepository userRepository,
+        ICourseRepository courseRepository,
+        IUserLessonProgressRepository progressRepository)
     {
         _enrollmentRepository = enrollmentRepository;
         _userRepository = userRepository;
@@ -25,127 +27,65 @@ public class EnrollmentService : IEnrollmentService
         _progressRepository = progressRepository;
     }
 
-    public async Task<ApiResponse<EnrollmentResponse>> GetByIdAsync(int id)
+    public async Task<PagedResult<EnrollmentResponse>> GetAllAsync(EnrollmentQueryParams query)
     {
-        var enrollment = await _enrollmentRepository.GetByIdAsync(id);
-        if (enrollment == null)
-            return ApiResponse<EnrollmentResponse>.FailResult("Enrollment not found.");
-
-        // Hydrate navigation props if needed
-        if (enrollment.User == null)
-            enrollment.User = (await _userRepository.GetByIdAsync(enrollment.UserId))!;
-        if (enrollment.Course == null)
-            enrollment.Course = (await _courseRepository.GetByIdAsync(enrollment.CourseId))!;
-
-        return ApiResponse<EnrollmentResponse>.SuccessResult(MapToResponse(enrollment));
-    }
-
-    public async Task<PagedResponse<EnrollmentResponse>> GetAllAsync(EnrollmentQueryParams query)
-    {
-        query.Page = Math.Max(1, query.Page);
-        query.PageSize = Math.Clamp(query.PageSize, 1, 100);
-
+        var (sortBy, sortDesc) = query.ParseSort();
         var (items, total) = await _enrollmentRepository.SearchAsync(
-            query.UserId, query.CourseId, query.Page, query.PageSize, query.SortBy, query.SortDesc);
+            query.UserId, query.CourseId, query.PageNumber, query.PageSize, sortBy, sortDesc);
 
-        return PagedResponse<EnrollmentResponse>.SuccessResult(
-            items.Select(MapToResponse), total, query.Page, query.PageSize);
+        return PagedResult<EnrollmentResponse>.Create(items.Select(MapToResponse), total, query);
     }
 
-    public async Task<ApiResponse<List<EnrollmentResponse>>> GetByUserIdAsync(int userId)
+    public async Task<EnrollmentResponse> GetByIdAsync(int id)
     {
-        if (!await _userRepository.ExistsAsync(userId))
-            return ApiResponse<List<EnrollmentResponse>>.FailResult("User not found.");
+        var enrollment = await _enrollmentRepository.GetByIdAsync(id)
+            ?? throw new NotFoundException("Enrollment", id);
 
-        var enrollments = await _enrollmentRepository.GetByUserIdAsync(userId);
-        return ApiResponse<List<EnrollmentResponse>>.SuccessResult(
-            enrollments.Select(MapToResponse).ToList());
+        // Hydrate navigation props for the response
+        enrollment.User ??= (await _userRepository.GetByIdAsync(enrollment.UserId))!;
+        enrollment.Course ??= (await _courseRepository.GetByIdAsync(enrollment.CourseId))!;
+
+        return MapToResponse(enrollment);
     }
 
-    public async Task<ApiResponse<List<EnrollmentResponse>>> GetByCourseIdAsync(int courseId)
+    public async Task<EnrollmentResponse> SelfEnrollAsync(int userId, int courseId)
     {
-        if (!await _courseRepository.ExistsAsync(courseId))
-            return ApiResponse<List<EnrollmentResponse>>.FailResult("Course not found.");
-
-        var enrollments = await _enrollmentRepository.GetByCourseIdAsync(courseId);
-        return ApiResponse<List<EnrollmentResponse>>.SuccessResult(
-            enrollments.Select(MapToResponse).ToList());
-    }
-
-    public async Task<ApiResponse<EnrollmentResponse>> EnrollAsync(CreateEnrollmentRequest request)
-    {
-        if (!await _userRepository.ExistsAsync(request.UserId))
-            return ApiResponse<EnrollmentResponse>.FailResult("User not found.");
-
-        var course = await _courseRepository.GetByIdAsync(request.CourseId);
-        if (course == null)
-            return ApiResponse<EnrollmentResponse>.FailResult("Course not found.");
-
-        if (await _enrollmentRepository.IsEnrolledAsync(request.UserId, request.CourseId))
-            return ApiResponse<EnrollmentResponse>.FailResult("User is already enrolled in this course.");
+        var course = await _courseRepository.GetByIdAsync(courseId);
+        if (course == null || !course.IsPublished)
+            throw new NotFoundException("Course", courseId);
 
         if (course.Price > 0)
-            return ApiResponse<EnrollmentResponse>.FailResult("Cannot enroll directly in a paid course. Please purchase the course first.");
+            throw new BusinessRuleException("This is a paid course. Please purchase it to enroll.");
 
-        var enrollment = new Enrollment
-        {
-            UserId = request.UserId,
-            CourseId = request.CourseId,
-            EnrolledAt = DateTime.UtcNow
-        };
-
-        var created = await _enrollmentRepository.AddAsync(enrollment);
-
-        var user = await _userRepository.GetByIdAsync(request.UserId);
-        created.User = user!;
-        created.Course = course;
-
-        return ApiResponse<EnrollmentResponse>.SuccessResult(
-            MapToResponse(created), "Enrolled successfully.");
+        return await CreateEnrollmentAsync(userId, course);
     }
 
-    public async Task<ApiResponse<EnrollmentResponse>> UpdateProgressAsync(int id, UpdateEnrollmentRequest request)
+    public async Task<EnrollmentResponse> GrantAsync(CreateEnrollmentRequest request)
     {
-        var enrollment = await _enrollmentRepository.GetByIdAsync(id);
-        if (enrollment == null)
-            return ApiResponse<EnrollmentResponse>.FailResult("Enrollment not found.");
+        var course = await _courseRepository.GetByIdAsync(request.CourseId)
+            ?? throw new NotFoundException("Course", request.CourseId);
 
-        enrollment.ProgressPercentage = request.ProgressPercentage;
-        enrollment.CompletedAt = request.CompletedAt;
-        enrollment.LastAccessedAt = request.LastAccessedAt ?? DateTime.UtcNow;
-
-        await _enrollmentRepository.UpdateAsync(enrollment);
-
-        // Hydrate for response
-        if (enrollment.User == null)
-            enrollment.User = (await _userRepository.GetByIdAsync(enrollment.UserId))!;
-        if (enrollment.Course == null)
-            enrollment.Course = (await _courseRepository.GetByIdAsync(enrollment.CourseId))!;
-
-        return ApiResponse<EnrollmentResponse>.SuccessResult(MapToResponse(enrollment), "Progress updated.");
+        return await CreateEnrollmentAsync(request.UserId, course);
     }
 
-    public async Task<ApiResponse<bool>> UnenrollAsync(int id)
+    public async Task UnenrollAsync(int id)
     {
         if (!await _enrollmentRepository.ExistsAsync(id))
-            return ApiResponse<bool>.FailResult("Enrollment not found.");
+            throw new NotFoundException("Enrollment", id);
 
         await _enrollmentRepository.DeleteAsync(id);
-        return ApiResponse<bool>.SuccessResult(true, "Unenrolled successfully.");
     }
-    public async Task<ApiResponse<List<MyCourseResponse>>> GetMyCoursesAsync(int userId)
-    {
-        if (!await _userRepository.ExistsAsync(userId))
-            return ApiResponse<List<MyCourseResponse>>.FailResult("User not found.");
 
+    public async Task<List<MyCourseResponse>> GetMyCoursesAsync(int userId)
+    {
         var enrollments = await _enrollmentRepository.GetByUserIdWithDetailsAsync(userId);
 
-        var result = enrollments.Select(e =>
+        return enrollments.Select(e =>
         {
             var totalLessons = e.Course?.Lessons?.Count ?? 0;
             var completedLessons = totalLessons > 0
-                                    ? (int)Math.Round(totalLessons * (double)e.ProgressPercentage / 100)
-                                    : 0;
+                ? (int)Math.Round(totalLessons * (double)e.ProgressPercentage / 100)
+                : 0;
 
             return new MyCourseResponse
             {
@@ -164,44 +104,53 @@ public class EnrollmentService : IEnrollmentService
                 IsCompleted = e.CompletedAt.HasValue
             };
         }).ToList();
-
-        return ApiResponse<List<MyCourseResponse>>.SuccessResult(result);
     }
-    public async Task<ApiResponse<CourseProgressResponse>> GetCourseProgressAsync(int userId, int courseId)
+
+    public async Task<CourseProgressResponse> GetCourseProgressAsync(int userId, int courseId)
     {
-        var enrollment = await _enrollmentRepository.GetByUserAndCourseAsync(userId, courseId);
-        if (enrollment == null)
-            return ApiResponse<CourseProgressResponse>.FailResult($"Enrollment not found. UserId={userId}, CourseId={courseId}");
+        var enrollment = await _enrollmentRepository.GetByUserAndCourseAsync(userId, courseId)
+            ?? throw new NotFoundException("You are not enrolled in this course.");
 
-        var course = await _courseRepository.GetWithLessonsAsync(courseId);
-        if (course == null)
-            return ApiResponse<CourseProgressResponse>.FailResult($"Course not found. CourseId={courseId}");
+        var course = await _courseRepository.GetWithLessonsAsync(courseId)
+            ?? throw new NotFoundException("Course", courseId);
 
-        var lessonIds = course.Lessons.Select(l => l.Id).ToList();
-        if (!lessonIds.Any())
-            return ApiResponse<CourseProgressResponse>.FailResult($"Course has no lessons. CourseId={courseId}, TotalLessons={course.TotalLessons}");
+        var lessonIds = course.Lessons.Select(l => l.Id).ToHashSet();
+        var completedLessons = (await _progressRepository.GetByUserIdAsync(userId))
+            .Count(p => lessonIds.Contains(p.LessonId) && p.Completed);
 
-        var allProgress = await _progressRepository.GetByUserIdAsync(userId);
-        var courseProgress = allProgress
-            .Where(p => lessonIds.Contains(p.LessonId))
-            .ToList();
-
-        
-  
-        var totalLessons = course.Lessons.Count;
-        var completedLessons = courseProgress.Count(p => p.Completed);
-        return ApiResponse<CourseProgressResponse>.SuccessResult(new CourseProgressResponse
+        return new CourseProgressResponse
         {
             CourseId = courseId,
             CourseTitle = course.Title,
             ProgressPercentage = enrollment.ProgressPercentage,
             CompletedLessons = completedLessons,
-            TotalLessons = totalLessons,
+            TotalLessons = lessonIds.Count,
             LastAccessedAt = enrollment.LastAccessedAt,
             IsCompleted = enrollment.CompletedAt.HasValue
-        });
+        };
     }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private async Task<EnrollmentResponse> CreateEnrollmentAsync(int userId, Course course)
+    {
+        var user = await _userRepository.GetByIdAsync(userId)
+            ?? throw new NotFoundException("User", userId);
+
+        if (await _enrollmentRepository.IsEnrolledAsync(userId, course.Id))
+            throw new ConflictException("User is already enrolled in this course.");
+
+        var created = await _enrollmentRepository.AddAsync(new Enrollment
+        {
+            UserId = userId,
+            CourseId = course.Id,
+            EnrolledAt = DateTime.UtcNow
+        });
+
+        created.User = user;
+        created.Course = course;
+        return MapToResponse(created);
+    }
 
     private static EnrollmentResponse MapToResponse(Enrollment e) => new()
     {

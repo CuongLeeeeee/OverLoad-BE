@@ -1,18 +1,19 @@
 ﻿using System.Text;
 using System.Text.Json;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using OverLoad.Services.Common;
+using Microsoft.Extensions.Options;
 using OverLoad.Services.DTOs.Request;
 using OverLoad.Services.DTOs.Response;
+using OverLoad.Services.Exceptions;
 using OverLoad.Services.Interfaces;
+using OverLoad.Services.Settings;
 
 namespace OverLoad.Services.Implementations;
 
 public class GeminiChatService : IChatService
 {
     private readonly HttpClient _httpClient;
-    private readonly IConfiguration _configuration;
+    private readonly GeminiSettings _settings;
     private readonly ILogger<GeminiChatService> _logger;
 
     private static readonly string[] InjectionPatterns =
@@ -52,97 +53,96 @@ public class GeminiChatService : IChatService
 
     LANGUAGE: respond in the same language the user writes in.
     """;
+
     public GeminiChatService(
         HttpClient httpClient,
-        IConfiguration configuration,
+        IOptions<GeminiSettings> options,
         ILogger<GeminiChatService> logger)
     {
         _httpClient = httpClient;
-        _configuration = configuration;
+        _settings = options.Value;
         _logger = logger;
     }
 
-    public async Task<ApiResponse<ChatResponse>> SendMessageAsync(ChatRequest request)
+    public async Task<ChatResponse> SendMessageAsync(ChatRequest request)
     {
+        // ── Bước 1: Kiểm tra prompt injection ────────────────────────────
+        var injectionCheck = DetectInjection(request.Message);
+        if (injectionCheck != null)
+        {
+            return new ChatResponse
+            {
+                Reply = "I can only help with coding and programming questions.",
+                IsBlocked = true,
+                BlockReason = injectionCheck
+            };
+        }
+
+        // ── Bước 2: Validate history (tối đa 3 cặp = 6 items) ────────────
+        var history = request.RecentHistory
+            .Where(h => h.Role is "user" or "model")
+            .Take(6)
+            .ToList();
+
+        // ── Bước 3: Build Gemini request payload ─────────────────────────
+        var payload = BuildPayload(request.Message, history);
+
+        // ── Bước 4: Gọi Gemini API ────────────────────────────────────────
+        if (string.IsNullOrWhiteSpace(_settings.ApiKey))
+            throw new InvalidOperationException("Gemini:ApiKey is not configured.");
+
+        var url = $"https://generativelanguage.googleapis.com/v1beta/models/{_settings.Model}:generateContent?key={_settings.ApiKey}";
+        using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+        HttpResponseMessage response;
+        string responseBody;
         try
         {
-            // ── Bước 1: Kiểm tra prompt injection ────────────────────────────
-            var injectionCheck = DetectInjection(request.Message);
-            if (injectionCheck != null)
-            {
-                return ApiResponse<ChatResponse>.SuccessResult(new ChatResponse
-                {
-                    Reply = "I can only help with coding and programming questions.",
-                    IsBlocked = true,
-                    BlockReason = injectionCheck
-                });
-            }
-
-            // ── Bước 2: Validate history (tối đa 3 cặp = 6 items) ────────────
-            var history = request.RecentHistory
-                .Where(h => h.Role is "user" or "model")
-                .Take(6)
-                .ToList();
-
-            // ── Bước 3: Build Gemini request payload ─────────────────────────
-            var payload = BuildPayload(request.Message, history);
-
-            // ── Bước 4: Gọi Gemini API ────────────────────────────────────────
-            var apiKey = _configuration["Gemini:ApiKey"]
-                ?? throw new InvalidOperationException("Gemini API key not configured.");
-            var model = _configuration["Gemini:Model"] ?? "gemini-2.0-flash";
-            var url = $"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={apiKey}";
-
-            var json = JsonSerializer.Serialize(payload);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            var response = await _httpClient.PostAsync(url, content);
-            var responseBody = await response.Content.ReadAsStringAsync();
-
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogError("Gemini API error {StatusCode}: {Body}", response.StatusCode, responseBody);
-                return ApiResponse<ChatResponse>.FailResult("AI service is currently unavailable. Please try again.");
-            }
-
-            // ── Bước 5: Parse response ────────────────────────────────────────
-            var geminiResponse = JsonSerializer.Deserialize<GeminiResponse>(
-                responseBody, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-            var candidate = geminiResponse?.Candidates?.FirstOrDefault();
-
-            // Kiểm tra safety block từ Gemini
-            if (candidate?.FinishReason == "SAFETY")
-            {
-                return ApiResponse<ChatResponse>.SuccessResult(new ChatResponse
-                {
-                    Reply = "I can only help with coding and programming questions.",
-                    IsBlocked = true,
-                    BlockReason = "Content blocked by safety filter."
-                });
-            }
-
-            var replyText = candidate?.Content?.Parts?.FirstOrDefault()?.Text
-                ?? "Sorry, I could not generate a response. Please try again.";
-
-            return ApiResponse<ChatResponse>.SuccessResult(new ChatResponse
-            {
-                Reply = replyText,
-                IsBlocked = false,
-                InputTokens = geminiResponse?.UsageMetadata?.PromptTokenCount ?? 0,
-                OutputTokens = geminiResponse?.UsageMetadata?.CandidatesTokenCount ?? 0
-            });
+            response = await _httpClient.PostAsync(url, content);
+            responseBody = await response.Content.ReadAsStringAsync();
         }
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "Network error calling Gemini API");
-            return ApiResponse<ChatResponse>.FailResult("Network error. Please check your connection.");
+            throw new ExternalServiceException("AI service is currently unreachable. Please try again.");
         }
-        catch (Exception ex)
+        catch (TaskCanceledException ex)
         {
-            _logger.LogError(ex, "Unexpected error in GeminiChatService");
-            return ApiResponse<ChatResponse>.FailResult("An unexpected error occurred.");
+            _logger.LogError(ex, "Gemini API request timed out");
+            throw new ExternalServiceException("AI service timed out. Please try again.");
         }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError("Gemini API error {StatusCode}: {Body}", response.StatusCode, responseBody);
+            throw new ExternalServiceException("AI service is currently unavailable. Please try again.");
+        }
+
+        // ── Bước 5: Parse response ────────────────────────────────────────
+        var geminiResponse = JsonSerializer.Deserialize<GeminiResponse>(
+            responseBody, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+        var candidate = geminiResponse?.Candidates?.FirstOrDefault();
+
+        // Kiểm tra safety block từ Gemini
+        if (candidate?.FinishReason == "SAFETY")
+        {
+            return new ChatResponse
+            {
+                Reply = "I can only help with coding and programming questions.",
+                IsBlocked = true,
+                BlockReason = "Content blocked by safety filter."
+            };
+        }
+
+        return new ChatResponse
+        {
+            Reply = candidate?.Content?.Parts?.FirstOrDefault()?.Text
+                ?? "Sorry, I could not generate a response. Please try again.",
+            IsBlocked = false,
+            InputTokens = geminiResponse?.UsageMetadata?.PromptTokenCount ?? 0,
+            OutputTokens = geminiResponse?.UsageMetadata?.CandidatesTokenCount ?? 0
+        };
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -160,8 +160,8 @@ public class GeminiChatService : IChatService
 
     private object BuildPayload(string userMessage, List<ChatHistoryItem> history)
     {
-        var maxTokens = int.Parse(_configuration["Gemini:MaxOutputTokens"] ?? "2048");
-        var temperature = double.Parse(_configuration["Gemini:Temperature"] ?? "0.7");
+        var maxTokens = _settings.MaxOutputTokens;
+        var temperature = _settings.Temperature;
 
         // Build contents array: system + history + current message
         var contents = new List<object>();

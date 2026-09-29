@@ -1,0 +1,65 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+[*.cs]
+indent_size = 4
+
+# ---------- Naming conventions ----------
+
+# Interfaces start with I
+dotnet_naming_rule.interface_should_be_prefixed_with_i.severity = warning
+dotnet_naming_rule.interface_should_be_prefixed_with_i.symbols = interface_symbol
+dotnet_naming_rule.interface_should_be_prefixed_with_i.style = prefix_i_style
+dotnet_naming_symbols.interface_symbol.applicable_kinds = interface
+dotnet_naming_style.prefix_i_style.required_prefix = I
+dotnet_naming_style.prefix_i_style.capitalization = pascal_case
+
+# Private field: _camelCase
+dotnet_naming_rule.private_field_should_be_camel_case.severity = warning
+dotnet_naming_rule.private_field_should_be_camel_case.symbols = private_field_symbol
+dotnet_naming_rule.private_field_should_be_camel_case.style = underscore_camel_case_style
+dotnet_naming_symbols.private_field_symbol.applicable_kinds = field
+dotnet_naming_symbols.private_field_symbol.applicable_accessibilities = private
+dotnet_naming_style.underscore_camel_case_style.required_prefix = _
+dotnet_naming_style.underscore_camel_case_style.capitalization = camel_case
+
+# Public members (method, property, class...): PascalCase
+dotnet_naming_rule.public_members_should_be_pascal_case.severity = warning
+dotnet_naming_rule.public_members_should_be_pascal_case.symbols = public_symbol
+dotnet_naming_rule.public_members_should_be_pascal_case.style = pascal_case_style
+dotnet_naming_symbols.public_symbol.applicable_kinds = method, property, class, event
+dotnet_naming_symbols.public_symbol.applicable_accessibilities = public
+dotnet_naming_style.pascal_case_style.capitalization = pascal_case
+
+# ---------- Code style ----------
+
+# 'var' when type is explicit from the right side, otherwise use explicit type
+csharp_style_var_for_built_in_types = true:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = false:suggestion
+
+# Prioritize expression-bodied members for 1-line property/method
+csharp_style_expression_bodied_properties = true:suggestion
+csharp_style_expression_bodied_methods = false:silent
+
+# using placed outside the namespace
+csharp_using_directive_placement = outside_namespace:warning
+
+# File-scoped namespace (namespace Foo; instead of namespace Foo { })
+csharp_style_namespace_declarations = file_scoped:warning
+
+# Required to use {} for if/for/while even if only 1 line
+csharp_prefer_braces = true:warning
+
+# Unused variables are not allowed
+dotnet_diagnostic.CS0168.severity = warning
+dotnet_diagnostic.CS0219.severity = warning
+
+# No extra semicolons or extra spaces
+dotnet_diagnostic.IDE0055.severity = warning

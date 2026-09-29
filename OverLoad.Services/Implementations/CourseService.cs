@@ -1,9 +1,10 @@
+using System.Text.RegularExpressions;
 using OverLoad.Domain.Entities;
-using OverLoad.Domain.Enums;
 using OverLoad.Repositories.Interfaces;
 using OverLoad.Services.Common;
 using OverLoad.Services.DTOs.Request;
 using OverLoad.Services.DTOs.Response;
+using OverLoad.Services.Exceptions;
 using OverLoad.Services.Interfaces;
 
 namespace OverLoad.Services.Implementations;
@@ -17,44 +18,33 @@ public class CourseService : ICourseService
         _courseRepository = courseRepository;
     }
 
-    public async Task<ApiResponse<CourseDetailResponse>> GetByIdAsync(int id)
+    public async Task<PagedResult<CourseResponse>> GetAllAsync(CourseQueryParams query, bool includeUnpublished)
     {
-        var course = await _courseRepository.GetWithLessonsAsync(id);
-        if (course == null)
-            return ApiResponse<CourseDetailResponse>.FailResult("Course not found.");
-
-        return ApiResponse<CourseDetailResponse>.SuccessResult(MapToDetailResponse(course));
-    }
-
-    public async Task<ApiResponse<CourseDetailResponse>> GetBySlugAsync(string slug)
-    {
-        var course = await _courseRepository.GetBySlugAsync(slug);
-        if (course == null)
-            return ApiResponse<CourseDetailResponse>.FailResult("Course not found.");
-
-        return ApiResponse<CourseDetailResponse>.SuccessResult(MapToDetailResponse(course));
-    }
-
-    public async Task<PagedResponse<CourseResponse>> GetAllAsync(CourseQueryParams query)
-    {
-        query.Page = Math.Max(1, query.Page);
-        query.PageSize = Math.Clamp(query.PageSize, 1, 100);
+        var isPublished = includeUnpublished ? query.IsPublished : true;
+        var (sortBy, sortDesc) = query.ParseSort();
 
         var (items, total) = await _courseRepository.SearchAsync(
-            query.Search, query.Category, query.Level, query.IsPublished,
-            query.Page, query.PageSize, query.SortBy, query.SortDesc);
+            query.Search, query.Category, query.Level?.ToString(), isPublished,
+            query.PageNumber, query.PageSize, sortBy, sortDesc);
 
-        return PagedResponse<CourseResponse>.SuccessResult(
-            items.Select(MapToResponse), total, query.Page, query.PageSize);
+        return PagedResult<CourseResponse>.Create(items.Select(MapToResponse), total, query);
     }
 
-    public async Task<ApiResponse<CourseResponse>> CreateAsync(CreateCourseRequest request)
+    public async Task<CourseDetailResponse> GetByIdAsync(int id, bool includeUnpublished)
     {
-        if (!Enum.TryParse<CourseLevel>(request.Level, true, out var level))
-            return ApiResponse<CourseResponse>.FailResult("Invalid level.", $"Level '{request.Level}' is not valid.");
+        var course = await _courseRepository.GetWithLessonsAsync(id);
+        return MapVisibleDetail(course, includeUnpublished, id);
+    }
 
+    public async Task<CourseDetailResponse> GetBySlugAsync(string slug, bool includeUnpublished)
+    {
+        var course = await _courseRepository.GetBySlugAsync(slug);
+        return MapVisibleDetail(course, includeUnpublished, slug);
+    }
+
+    public async Task<CourseResponse> CreateAsync(CreateCourseRequest request)
+    {
         var slug = GenerateSlug(request.Title);
-
         if (await _courseRepository.SlugExistsAsync(slug))
             slug = $"{slug}-{Guid.NewGuid().ToString()[..6]}";
 
@@ -65,22 +55,18 @@ public class CourseService : ICourseService
             Description = request.Description,
             ThumbnailUrl = request.ThumbnailUrl,
             Category = request.Category,
-            Level = level,
+            Level = request.Level,
             IsPublished = request.IsPublished
         };
 
         var created = await _courseRepository.AddAsync(course);
-        return ApiResponse<CourseResponse>.SuccessResult(MapToResponse(created), "Course created successfully.");
+        return MapToResponse(created);
     }
 
-    public async Task<ApiResponse<CourseResponse>> UpdateAsync(int id, UpdateCourseRequest request)
+    public async Task<CourseResponse> UpdateAsync(int id, UpdateCourseRequest request)
     {
-        var course = await _courseRepository.GetByIdAsync(id);
-        if (course == null)
-            return ApiResponse<CourseResponse>.FailResult("Course not found.");
-
-        if (!Enum.TryParse<CourseLevel>(request.Level, true, out var level))
-            return ApiResponse<CourseResponse>.FailResult("Invalid level.", $"Level '{request.Level}' is not valid.");
+        var course = await _courseRepository.GetByIdAsync(id)
+            ?? throw new NotFoundException("Course", id);
 
         // Regenerate slug only if title changed
         if (!course.Title.Equals(request.Title.Trim(), StringComparison.OrdinalIgnoreCase))
@@ -95,45 +81,35 @@ public class CourseService : ICourseService
         course.Description = request.Description;
         course.ThumbnailUrl = request.ThumbnailUrl;
         course.Category = request.Category;
-        course.Level = level;
+        course.Level = request.Level;
         course.IsPublished = request.IsPublished;
 
         await _courseRepository.UpdateAsync(course);
-        return ApiResponse<CourseResponse>.SuccessResult(MapToResponse(course), "Course updated successfully.");
+        return MapToResponse(course);
     }
 
-    public async Task<ApiResponse<bool>> DeleteAsync(int id)
+    public async Task DeleteAsync(int id)
     {
         if (!await _courseRepository.ExistsAsync(id))
-            return ApiResponse<bool>.FailResult("Course not found.");
+            throw new NotFoundException("Course", id);
 
         await _courseRepository.DeleteAsync(id);
-        return ApiResponse<bool>.SuccessResult(true, "Course deleted successfully.");
     }
-    public async Task<PagedResponse<CourseResponse>> GetByCategoryAsync(
-    string category, int page = 1, int pageSize = 10)
-    {
-        page = Math.Max(1, page);
-        pageSize = Math.Clamp(pageSize, 1, 100);
 
-        var (items, total) = await _courseRepository.SearchAsync(
-            searchTerm: null,
-            category: category,   // <-- truyền category vào đây
-            level: null,
-            isPublished: true,    // thường chỉ trả published
-            page, pageSize,
-            sortBy: "createdAt",
-            sortDesc: true);
-
-        return PagedResponse<CourseResponse>.SuccessResult(
-            items.Select(MapToResponse), total, page, pageSize);
-    }
     // ── Helpers ──────────────────────────────────────────────────────────────
 
+    // Draft courses are reported as missing to non-staff callers, so their existence is not leaked.
+    private static CourseDetailResponse MapVisibleDetail(Course? course, bool includeUnpublished, object key)
+    {
+        if (course == null || (!course.IsPublished && !includeUnpublished))
+            throw new NotFoundException("Course", key);
+
+        return MapToDetailResponse(course);
+    }
+
     private static string GenerateSlug(string title)
-        => System.Text.RegularExpressions.Regex
-            .Replace(title.Trim().ToLower(), @"[^a-z0-9\s-]", "")
-            .Replace(" ", "-")
+        => Regex.Replace(title.Trim().ToLowerInvariant(), @"[^a-z0-9\s-]", "")
+            .Replace(' ', '-')
             .Trim('-');
 
     private static CourseResponse MapToResponse(Course c) => new()

@@ -1,10 +1,9 @@
-﻿// OverLoad.Services/Implementations/ProgressService.cs
 using OverLoad.Domain.Entities;
-using OverLoad.Repositories.Implementations;
 using OverLoad.Repositories.Interfaces;
 using OverLoad.Services.Common;
 using OverLoad.Services.DTOs.Request;
 using OverLoad.Services.DTOs.Response;
+using OverLoad.Services.Exceptions;
 using OverLoad.Services.Interfaces;
 
 namespace OverLoad.Services.Implementations;
@@ -12,257 +11,134 @@ namespace OverLoad.Services.Implementations;
 public class ProgressService : IProgressService
 {
     private readonly IUserLessonProgressRepository _progressRepository;
-    private readonly IUserRepository _userRepository;
     private readonly ILessonRepository _lessonRepository;
     private readonly IEnrollmentRepository _enrollmentRepository;
 
     public ProgressService(
         IUserLessonProgressRepository progressRepository,
-        IUserRepository userRepository,
         ILessonRepository lessonRepository,
         IEnrollmentRepository enrollmentRepository)
     {
         _progressRepository = progressRepository;
-        _userRepository = userRepository;
         _lessonRepository = lessonRepository;
         _enrollmentRepository = enrollmentRepository;
     }
 
-    public async Task<ApiResponse<ProgressResponse>> GetByIdAsync(int id)
+    public async Task<PagedResult<ProgressResponse>> GetAllAsync(ProgressQueryParams query)
     {
-        var progress = await _progressRepository.GetByIdDetailAsync(id);
-        if (progress == null)
-            return ApiResponse<ProgressResponse>.FailResult("Progress record not found.");
-
-        return ApiResponse<ProgressResponse>.SuccessResult(MapToResponse(progress));
-    }
-
-    public async Task<PagedResponse<ProgressResponse>> GetAllAsync(ProgressQueryParams query)
-    {
-        query.Page = Math.Max(1, query.Page);
-        query.PageSize = Math.Clamp(query.PageSize, 1, 100);
-
+        var (sortBy, sortDesc) = query.ParseSort();
         var (items, total) = await _progressRepository.SearchAsync(
             query.UserId, query.LessonId, query.Completed,
-            query.Page, query.PageSize, query.SortBy, query.SortDesc);
+            query.PageNumber, query.PageSize, sortBy, sortDesc);
 
-        return PagedResponse<ProgressResponse>.SuccessResult(
-            items.Select(MapToResponse), total, query.Page, query.PageSize);
+        return PagedResult<ProgressResponse>.Create(items.Select(MapToResponse), total, query);
     }
 
-    public async Task<ApiResponse<ProgressResponse>> GetByUserAndLessonAsync(int userId, int lessonId)
+    public async Task<ProgressResponse> GetMyLessonProgressAsync(int userId, int lessonId)
     {
+        var progress = await _progressRepository.GetByUserAndLessonAsync(userId, lessonId)
+            ?? throw new NotFoundException("No progress recorded for this lesson yet.");
+
+        return MapToResponse(progress);
+    }
+
+    public async Task<ProgressResponse> SaveMyLessonProgressAsync(int userId, int lessonId, SaveProgressRequest request)
+    {
+        var lesson = await GetAccessibleLessonAsync(userId, lessonId);
         var progress = await _progressRepository.GetByUserAndLessonAsync(userId, lessonId);
-        if (progress == null)
-            return ApiResponse<ProgressResponse>.FailResult("Progress record not found.");
-
-        return ApiResponse<ProgressResponse>.SuccessResult(MapToResponse(progress));
-    }
-
-    public async Task<ApiResponse<List<ProgressResponse>>> GetByUserIdAsync(int userId)
-    {
-        if (!await _userRepository.ExistsAsync(userId))
-            return ApiResponse<List<ProgressResponse>>.FailResult("User not found.");
-
-        var records = await _progressRepository.GetByUserIdAsync(userId);
-        return ApiResponse<List<ProgressResponse>>.SuccessResult(
-            records.Select(MapToResponse).ToList());
-    }
-
-    public async Task<ApiResponse<List<ProgressResponse>>> GetByLessonIdAsync(int lessonId)
-    {
-        if (!await _lessonRepository.ExistsAsync(lessonId))
-            return ApiResponse<List<ProgressResponse>>.FailResult("Lesson not found.");
-
-        var records = await _progressRepository.GetByLessonIdAsync(lessonId);
-        return ApiResponse<List<ProgressResponse>>.SuccessResult(
-            records.Select(MapToResponse).ToList());
-    }
-
-    public async Task<ApiResponse<ProgressResponse>> CreateAsync(CreateProgressRequest request)
-    {
-        if (!await _userRepository.ExistsAsync(request.UserId))
-            return ApiResponse<ProgressResponse>.FailResult("User not found.");
-
-        if (!await _lessonRepository.ExistsAsync(request.LessonId))
-            return ApiResponse<ProgressResponse>.FailResult("Lesson not found.");
-
-        if (await _progressRepository.ExistsByUserAndLessonAsync(request.UserId, request.LessonId))
-            return ApiResponse<ProgressResponse>.FailResult(
-                "Progress record already exists. Use PUT to update or POST /upsert.");
-
-        var progress = new UserLessonProgress
-        {
-            UserId = request.UserId,
-            LessonId = request.LessonId,
-            LastScrollPercentage = request.LastScrollPercentage,
-            UnlockedCheckpointIndex = request.UnlockedCheckpointIndex,
-            Completed = request.Completed,
-            CompletedAt = request.Completed ? DateTime.UtcNow : null,
-            LastPositionSeconds = request.LastPositionSeconds,
-            WatchTimeSeconds = request.WatchTimeSeconds
-        };
-
-        await _progressRepository.AddAsync(progress);
-
-        var created = await _progressRepository.GetByUserAndLessonAsync(request.UserId, request.LessonId);
-        return ApiResponse<ProgressResponse>.SuccessResult(
-            MapToResponse(created!), "Progress created successfully.");
-    }
-
-    public async Task<ApiResponse<ProgressResponse>> UpdateAsync(int id, UpdateProgressRequest request)
-    {
-        var progress = await _progressRepository.GetByIdDetailAsync(id);
-        if (progress == null)
-            return ApiResponse<ProgressResponse>.FailResult("Progress record not found.");
+        var isNew = progress == null;
+        progress ??= new UserLessonProgress { UserId = userId, LessonId = lessonId };
 
         progress.LastScrollPercentage = request.LastScrollPercentage;
         progress.UnlockedCheckpointIndex = request.UnlockedCheckpointIndex;
         progress.LastPositionSeconds = request.LastPositionSeconds;
         progress.WatchTimeSeconds = request.WatchTimeSeconds;
 
-        // Chỉ set CompletedAt một lần khi chuyển sang completed
-        if (!progress.Completed && request.Completed)
+        // Completion is one-way: once completed, a later report cannot un-complete the lesson.
+        var becameCompleted = request.Completed && !progress.Completed;
+        if (becameCompleted)
         {
             progress.Completed = true;
             progress.CompletedAt = DateTime.UtcNow;
         }
-        else if (progress.Completed && !request.Completed)
-        {
-            // Cho phép reset completed
-            progress.Completed = false;
-            progress.CompletedAt = null;
-        }
 
-        await _progressRepository.UpdateAsync(progress);
+        if (isNew) await _progressRepository.AddAsync(progress);
+        else await _progressRepository.UpdateAsync(progress);
 
-        var updated = await _progressRepository.GetByIdDetailAsync(id);
-        return ApiResponse<ProgressResponse>.SuccessResult(
-            MapToResponse(updated!), "Progress updated successfully.");
+        await TouchEnrollmentAsync(userId, lesson.CourseId, recalculate: becameCompleted);
+
+        return MapToResponse((await _progressRepository.GetByUserAndLessonAsync(userId, lessonId))!);
     }
 
-    public async Task<ApiResponse<ProgressResponse>> UpsertAsync(CreateProgressRequest request)
+    public async Task<ProgressResponse> CompleteLessonAsync(int userId, int lessonId)
     {
-        if (!await _userRepository.ExistsAsync(request.UserId))
-            return ApiResponse<ProgressResponse>.FailResult("User not found.");
+        var lesson = await GetAccessibleLessonAsync(userId, lessonId);
+        var progress = await _progressRepository.GetByUserAndLessonAsync(userId, lessonId);
 
-        if (!await _lessonRepository.ExistsAsync(request.LessonId))
-            return ApiResponse<ProgressResponse>.FailResult("Lesson not found.");
-
-        var existing = await _progressRepository.GetByUserAndLessonAsync(request.UserId, request.LessonId);
-
-        if (existing != null)
+        if (progress == null)
         {
-            existing.LastScrollPercentage = request.LastScrollPercentage;
-            existing.UnlockedCheckpointIndex = request.UnlockedCheckpointIndex;
-            existing.LastPositionSeconds = request.LastPositionSeconds;
-            existing.WatchTimeSeconds = request.WatchTimeSeconds;
-
-            if (!existing.Completed && request.Completed)
+            await _progressRepository.AddAsync(new UserLessonProgress
             {
-                existing.Completed = true;
-                existing.CompletedAt = DateTime.UtcNow;
-            }
-
-            await _progressRepository.UpdateAsync(existing);
-            var updated = await _progressRepository.GetByUserAndLessonAsync(request.UserId, request.LessonId);
-            return ApiResponse<ProgressResponse>.SuccessResult(
-                MapToResponse(updated!), "Progress updated successfully.");
+                UserId = userId,
+                LessonId = lessonId,
+                Completed = true,
+                CompletedAt = DateTime.UtcNow,
+                LastScrollPercentage = 100
+            });
+        }
+        else if (!progress.Completed)
+        {
+            progress.Completed = true;
+            progress.CompletedAt = DateTime.UtcNow;
+            await _progressRepository.UpdateAsync(progress);
         }
 
-        var progress = new UserLessonProgress
-        {
-            UserId = request.UserId,
-            LessonId = request.LessonId,
-            LastScrollPercentage = request.LastScrollPercentage,
-            UnlockedCheckpointIndex = request.UnlockedCheckpointIndex,
-            Completed = request.Completed,
-            CompletedAt = request.Completed ? DateTime.UtcNow : null,
-            LastPositionSeconds = request.LastPositionSeconds,
-            WatchTimeSeconds = request.WatchTimeSeconds
-        };
+        await TouchEnrollmentAsync(userId, lesson.CourseId, recalculate: true);
 
-        await _progressRepository.AddAsync(progress);
-        var created = await _progressRepository.GetByUserAndLessonAsync(request.UserId, request.LessonId);
-        return ApiResponse<ProgressResponse>.SuccessResult(
-            MapToResponse(created!), "Progress created successfully.");
+        return MapToResponse((await _progressRepository.GetByUserAndLessonAsync(userId, lessonId))!);
     }
 
-    public async Task<ApiResponse<bool>> DeleteAsync(int id)
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    /// <summary>Free lessons are open to any signed-in user; paid lessons need an enrollment.</summary>
+    private async Task<Lesson> GetAccessibleLessonAsync(int userId, int lessonId)
     {
-        if (!await _progressRepository.ExistsAsync(id))
-            return ApiResponse<bool>.FailResult("Progress record not found.");
+        var lesson = await _lessonRepository.GetByIdAsync(lessonId)
+            ?? throw new NotFoundException("Lesson", lessonId);
 
-        await _progressRepository.DeleteAsync(id);
-        return ApiResponse<bool>.SuccessResult(true, "Progress deleted successfully.");
-    }
-    public async Task<ApiResponse<ProgressResponse>> CompleteLessonAsync(int userId, int lessonId, CompleteLessonRequest request)
-    {
-        var lesson = await _lessonRepository.GetWithCourseAsync(lessonId);
-        if (lesson == null)
-            return ApiResponse<ProgressResponse>.FailResult("Lesson not found.");
+        if (!lesson.IsFree && !await _enrollmentRepository.IsEnrolledAsync(userId, lesson.CourseId))
+            throw new ForbiddenException("Enroll in this course to track progress on this lesson.");
 
-        if (!await _userRepository.ExistsAsync(userId))
-            return ApiResponse<ProgressResponse>.FailResult("User not found.");
-
-        // Upsert progress
-        var existing = await _progressRepository.GetByUserAndLessonAsync(userId, lessonId);
-
-        if (existing != null)
-        {
-            if (!existing.Completed)
-            {
-                existing.Completed = true;
-                existing.CompletedAt = DateTime.UtcNow;
-                await _progressRepository.UpdateAsync(existing);
-            }
-
-            // Cập nhật enrollment progress
-            await UpdateEnrollmentProgressAsync(userId, lesson.CourseId, request.CourseProgress);
-
-            var updated = await _progressRepository.GetByUserAndLessonAsync(userId, lessonId);
-            return ApiResponse<ProgressResponse>.SuccessResult(
-                MapToResponse(updated!), "Lesson marked as completed.");
-        }
-
-        // Tạo mới nếu chưa có progress record
-        var progress = new UserLessonProgress
-        {
-            UserId = userId,
-            LessonId = lessonId,
-            Completed = true,
-            CompletedAt = DateTime.UtcNow,
-            LastScrollPercentage = 100,
-            UnlockedCheckpointIndex = 0,
-            LastPositionSeconds = 0,
-            WatchTimeSeconds = 0
-        };
-
-        await _progressRepository.AddAsync(progress);
-
-        // Cập nhật enrollment progress
-        await UpdateEnrollmentProgressAsync(userId, lesson.CourseId, request.CourseProgress);
-
-        var created = await _progressRepository.GetByUserAndLessonAsync(userId, lessonId);
-        return ApiResponse<ProgressResponse>.SuccessResult(
-            MapToResponse(created!), "Lesson marked as completed.");
+        return lesson;
     }
 
-    private async Task UpdateEnrollmentProgressAsync(int userId, int courseId, decimal progressPercentage)
+    /// <summary>
+    /// Updates LastAccessedAt and, when asked, recomputes the course percentage from completed
+    /// lessons on the server (the client no longer sends it).
+    /// </summary>
+    private async Task TouchEnrollmentAsync(int userId, int courseId, bool recalculate)
     {
         var enrollment = await _enrollmentRepository.GetByUserAndCourseAsync(userId, courseId);
         if (enrollment == null) return;
 
-        var safeProgress = Math.Clamp(progressPercentage, 0, 100);
-        enrollment.ProgressPercentage = safeProgress;
         enrollment.LastAccessedAt = DateTime.UtcNow;
 
-        if (safeProgress >= 100 && enrollment.CompletedAt == null)
-            enrollment.CompletedAt = DateTime.UtcNow;
+        if (recalculate)
+        {
+            var lessonIds = (await _lessonRepository.GetByCourseIdAsync(courseId)).Select(l => l.Id).ToHashSet();
+            var completed = (await _progressRepository.GetByUserIdAsync(userId))
+                .Count(p => lessonIds.Contains(p.LessonId) && p.Completed);
+
+            enrollment.ProgressPercentage = lessonIds.Count == 0
+                ? 0
+                : Math.Round(completed * 100m / lessonIds.Count, 2);
+
+            if (enrollment.ProgressPercentage >= 100 && enrollment.CompletedAt == null)
+                enrollment.CompletedAt = DateTime.UtcNow;
+        }
 
         await _enrollmentRepository.UpdateAsync(enrollment);
     }
-    // ── Mapping ───────────────────────────────────────────────────────────────
 
     private static ProgressResponse MapToResponse(UserLessonProgress p) => new()
     {

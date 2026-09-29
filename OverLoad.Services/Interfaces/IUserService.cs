@@ -6,9 +6,10 @@ namespace OverLoad.Services.Interfaces;
 
 public interface IUserService
 {
-    Task<ApiResponse<UserDetailResponse>> GetByIdAsync(int id);
-    Task<PagedResponse<UserResponse>> GetAllAsync(UserQueryParams query);
-    Task<ApiResponse<UserResponse>> CreateAsync(CreateUserRequest request);
-    Task<ApiResponse<UserResponse>> UpdateAsync(int id, UpdateUserRequest request);
-    Task<ApiResponse<bool>> DeleteAsync(int id);
+    Task<PagedResult<UserResponse>> GetAllAsync(UserQueryParams query);
+    Task<UserDetailResponse> GetByIdAsync(int id);
+    Task<UserResponse> CreateAsync(CreateUserRequest request);
+    Task<UserResponse> UpdateAsync(int id, UpdateUserRequest request);
+    Task<UserResponse> UpdateProfileAsync(int id, UpdateProfileRequest request);
+    Task DeleteAsync(int id);
 }

@@ -1,0 +1,21 @@
+<Project>
+
+  <!--
+   Applies to ALL projects in the solution (API, Services, Repositories, Domain, Tests).
+   Enforces the .editorconfig conventions at build time, not only inside the IDE.
+  -->
+
+  <PropertyGroup>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+
+    <AnalysisLevel>latest</AnalysisLevel>
+    <AnalysisMode>Recommended</AnalysisMode>
+
+    <!-- Convention violations are reported as warnings; they do not break the build. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+
+    <!-- Missing XML doc comments on public members are not reported. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+</Project>

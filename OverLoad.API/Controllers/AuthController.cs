@@ -1,76 +1,55 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Asp.Versioning;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using OverLoad.Domain.Entities;
+using OverLoad.API.Common;
+using OverLoad.API.Extensions;
 using OverLoad.Services.DTOs.Request;
+using OverLoad.Services.DTOs.Response;
 using OverLoad.Services.Interfaces;
-using System.Security.Claims;
 
-namespace OverLoad.API.Controllers
+namespace OverLoad.API.Controllers;
+
+[ApiController]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/auth")]
+[Produces("application/json")]
+public class AuthController : ControllerBase
 {
-    [ApiController]
-    [Route("api/[controller]")]
-    [Produces("application/json")]
-    public class AuthController : ControllerBase
+    private readonly IAuthService _authService;
+
+    public AuthController(IAuthService authService) => _authService = authService;
+
+    /// <summary>Register a new account (Student role).</summary>
+    [HttpPost("register")]
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<ApiResponse<AuthResponse>>> Register([FromBody] RegisterRequest request)
     {
-        private readonly IAuthService _authService;
+        var result = await _authService.RegisterAsync(request);
+        return StatusCode(StatusCodes.Status201Created, ApiResponse<AuthResponse>.Ok(result, "Registration successful."));
+    }
 
-        public AuthController(IAuthService authService) => _authService = authService;
+    /// <summary>Login — returns access token + refresh token.</summary>
+    [HttpPost("login")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<ApiResponse<AuthResponse>>> Login([FromBody] LoginRequest request)
+        => Ok(ApiResponse<AuthResponse>.Ok(await _authService.LoginAsync(request), "Login successful."));
 
-        /// <summary>Register a new account (Student role).</summary>
-        [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] RegisterRequest request)
-        {
-            if (!ModelState.IsValid) return BadRequest(ModelState);
-            var result = await _authService.RegisterAsync(request);
-            if (!result.Success) return BadRequest(result);
-            return StatusCode(201, result);
-        }
+    /// <summary>Get a new access token using a valid refresh token (the refresh token is rotated).</summary>
+    [HttpPost("refresh")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<ApiResponse<AuthResponse>>> Refresh([FromBody] RefreshTokenRequest request)
+        => Ok(ApiResponse<AuthResponse>.Ok(await _authService.RefreshTokenAsync(request), "Token refreshed successfully."));
 
-        /// <summary>Login — returns access token + refresh token.</summary>
-        [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] LoginRequest request)
-        {
-            if (!ModelState.IsValid) return BadRequest(ModelState);
-            var result = await _authService.LoginAsync(request);
-            if (!result.Success) return Unauthorized(result);
-            return Ok(result);
-        }
-
-        /// <summary>Get a new access token using a valid refresh token.</summary>
-        [HttpPost("refresh")]
-        public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request)
-        {
-            if (!ModelState.IsValid) return BadRequest(ModelState);
-            var result = await _authService.RefreshTokenAsync(request);
-            if (!result.Success) return Unauthorized(result);
-            return Ok(result);
-        }
-
-        /// <summary>Logout — invalidates the refresh token.</summary>
-        [HttpPost("logout")]
-        [Authorize]
-        public async Task<IActionResult> Logout()
-        {
-            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier)
-                           ?? User.FindFirstValue("sub");
-
-            if (userIdClaim == null || !int.TryParse(userIdClaim, out var userId))
-                return Unauthorized();
-
-            var result = await _authService.LogoutAsync(userId);
-            if (!result.Success) return BadRequest(result);
-            return Ok(result);
-        }
-
-        /// <summary>Get current authenticated user info from token.</summary>
-        [HttpGet("me")]
-        [Authorize]
-        public IActionResult Me() => Ok(new
-        {
-            Id = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub"),
-            Email = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue("email"),
-            FullName = User.FindFirstValue(ClaimTypes.Name),
-            Role = User.FindFirstValue(ClaimTypes.Role)
-        });
+    /// <summary>Logout — invalidates the refresh token.</summary>
+    [HttpPost("logout")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<object?>>> Logout()
+    {
+        await _authService.LogoutAsync(User.GetUserId());
+        return Ok(ApiResponse.Ok("Logged out successfully."));
     }
 }

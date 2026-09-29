@@ -1,6 +1,6 @@
 # OverLoad — E-Learning Platform API
 
-A production-ready ASP.NET Core 8 Web API built with a clean **3-layer architecture**: API → Services → Repositories.
+ASP.NET Core 9 Web API with a layered architecture: API → Services → Repositories → Domain.
 
 ---
 
@@ -9,31 +9,20 @@ A production-ready ASP.NET Core 8 Web API built with a clean **3-layer architect
 ```
 OverLoad/
 ├── OverLoad.Domain/            # Pure C# entities & enums (no dependencies)
-│   ├── Common/BaseEntity.cs
-│   ├── Entities/               # User, Course, Lesson, Enrollment, UserLessonProgress
-│   └── Enums/                  # UserRole, CourseLevel
-│
-├── OverLoad.Repositories/      # Data access layer (EF Core)
-│   ├── Data/
-│   │   ├── AppDbContext.cs
-│   │   └── DesignTimeDbContextFactory.cs
-│   ├── Configurations/         # IEntityTypeConfiguration per entity
-│   ├── Interfaces/             # IBaseRepository<T> + domain-specific interfaces
-│   └── Implementations/        # Concrete repository classes
-│
-├── OverLoad.Services/          # Business logic layer
-│   ├── Common/ApiResponse.cs   # Unified response wrapper + pagination
-│   ├── DTOs/
-│   │   ├── Request/            # CreateXxx, UpdateXxx, XxxQueryParams
-│   │   └── Response/           # XxxResponse, XxxDetailResponse
-│   ├── Interfaces/             # IUserService, ICourseService, etc.
-│   └── Implementations/        # Concrete service classes
-│
-└── OverLoad.API/               # ASP.NET Core Web API
-    ├── Controllers/            # UsersController, CoursesController, etc.
-    ├── Middleware/             # GlobalExceptionMiddleware
-    ├── Program.cs              # DI wiring + Swagger + EF setup
-    └── appsettings.json
+├── OverLoad.Repositories/      # EF Core: AppDbContext, configurations, repositories, migrations
+├── OverLoad.Services/          # Business logic
+│   ├── Common/                 # PagedResult<T>, QueryParameters (paging + "-field" sorting)
+│   ├── DTOs/                   # Request / Response DTOs
+│   ├── Exceptions/             # NotFound, Conflict, BusinessRule, Unauthorized, Forbidden, ExternalService
+│   ├── Settings/               # JwtSettings, GeminiSettings (Options pattern)
+│   └── Implementations/        # Services return DTOs and throw exceptions — no HTTP concerns
+├── OverLoad.API/
+│   ├── Common/                 # ApiResponse<T> envelope, Roles, PayOSSettings
+│   ├── Controllers/            # Thin controllers, versioned under /api/v1
+│   ├── Extensions/             # ClaimsPrincipal.GetUserId() / IsStaff()
+│   ├── Middleware/             # GlobalExceptionMiddleware: exception → HTTP status + envelope
+│   └── Validators/             # FluentValidation rules
+└── tests/OverLoad.Tests/       # xUnit: service tests (EF InMemory) + HTTP integration tests
 ```
 
 ---
@@ -41,160 +30,160 @@ OverLoad/
 ## 🚀 Getting Started
 
 ### Prerequisites
-- [.NET 8 SDK](https://dotnet.microsoft.com/download)
-- SQL Server (LocalDB, Express, or full — see connection string)
+- [.NET 9 SDK](https://dotnet.microsoft.com/download)
+- SQL Server (LocalDB, Express, or full)
 
-### 1. Clone & restore
+### 1. Configure
+Copy `appsettings.example.json` to `OverLoad.API/appsettings.json` and fill in the values.
+Every setting can also come from environment variables, e.g. `Jwt__SecretKey`, `PayOS__ApiKey`
+(the legacy `PAYOS_CLIENT_ID` / `PAYOS_API_KEY` / `PAYOS_CHECKSUM_KEY` variables still work).
+
+### 2. Database
 ```bash
-git clone https://github.com/yourorg/overload.git
-cd OverLoad
-dotnet restore
+dotnet ef database update --project OverLoad.Repositories --startup-project OverLoad.API
 ```
+In Development the API also migrates automatically on startup.
 
-### 2. Configure the database
-Edit `OverLoad.API/appsettings.Development.json`:
-```json
-{
-  "ConnectionStrings": {
-    "DefaultConnection": "Server=(localdb)\\mssqllocaldb;Database=OverLoadDb_Dev;Trusted_Connection=True;"
-  }
-}
-```
-
-### 3. Apply EF Core migrations
+### 3. Run
 ```bash
-# From the solution root:
-dotnet ef migrations add InitialCreate \
-  --project OverLoad.Repositories \
-  --startup-project OverLoad.API
-
-dotnet ef database update \
-  --project OverLoad.Repositories \
-  --startup-project OverLoad.API
+dotnet run --project OverLoad.API
 ```
+Swagger UI is served at the root in Development. `GET /health` returns `{ "status": "healthy" }`.
 
-> **Shortcut**: In Development mode the API auto-migrates on startup (`db.Database.MigrateAsync()`).
-
-### 4. Run the API
+### 4. Test
 ```bash
-cd OverLoad.API
-dotnet run
+dotnet test
 ```
-
-Open **http://localhost:5000** — Swagger UI loads at the root.
-
----
-
-## 📡 API Endpoints
-
-### Users `/api/users`
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | `/api/users` | Paginated list (search, filter by role, sort) |
-| GET | `/api/users/{id}` | User detail + enrollment history |
-| POST | `/api/users` | Create user |
-| PUT | `/api/users/{id}` | Update user |
-| DELETE | `/api/users/{id}` | Delete user |
-
-### Courses `/api/courses`
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | `/api/courses` | Paginated list (search, category, level, published) |
-| GET | `/api/courses/{id}` | Course detail + lessons |
-| GET | `/api/courses/slug/{slug}` | Course by URL slug |
-| GET | `/api/courses/{id}/lessons` | All ordered lessons for a course |
-| POST | `/api/courses` | Create course (slug auto-generated) |
-| PUT | `/api/courses/{id}` | Update course |
-| DELETE | `/api/courses/{id}` | Delete course + cascade lessons |
-
-### Lessons `/api/lessons`
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | `/api/lessons` | Paginated list (filter by courseId, isFree, search) |
-| GET | `/api/lessons/{id}` | Lesson detail with full content |
-| POST | `/api/lessons` | Create lesson (auto-assigns OrderIndex) |
-| PUT | `/api/lessons/{id}` | Update lesson / reorder |
-| DELETE | `/api/lessons/{id}` | Delete (recalculates course totals) |
-
-### Enrollments `/api/enrollments`
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | `/api/enrollments` | Paginated list (filter by userId/courseId) |
-| GET | `/api/enrollments/{id}` | Single enrollment |
-| GET | `/api/enrollments/user/{userId}` | All enrollments for user |
-| GET | `/api/enrollments/course/{courseId}` | All enrollments for course |
-| POST | `/api/enrollments` | Enroll user in course |
-| PATCH | `/api/enrollments/{id}/progress` | Update progress % |
-| DELETE | `/api/enrollments/{id}` | Unenroll |
-
-### Progress `/api/progress`
-| Method | Route | Description |
-|--------|-------|-------------|
-| GET | `/api/progress/{id}` | Single progress record |
-| GET | `/api/progress/user/{userId}` | All progress for user |
-| GET | `/api/progress/user/{userId}/lesson/{lessonId}` | Progress for user+lesson |
-| POST | `/api/progress` | Upsert progress (create or update) |
-| DELETE | `/api/progress/{id}` | Delete progress record |
+No database is needed — tests use EF Core InMemory. CI runs the same command on every PR (`.github/workflows/ci.yml`).
 
 ---
 
 ## 📦 Response Format
 
-All endpoints return a consistent envelope:
+Every endpoint — including validation errors, 401 and 403 — returns the same envelope:
+
+```json
+{ "success": true, "message": "Request processed successfully", "data": { }, "errors": null }
+```
+
+Paged endpoints put the page inside `data`:
 
 ```json
 {
   "success": true,
-  "message": "Operation successful",
-  "data": { ... },
-  "errors": []
+  "data": {
+    "items": [ ],
+    "pageNumber": 1, "pageSize": 10, "totalCount": 42, "totalPages": 5,
+    "hasPreviousPage": false, "hasNextPage": true
+  }
 }
 ```
 
-Paginated responses include:
-```json
-{
-  "success": true,
-  "message": "Data retrieved successfully",
-  "data": [ ... ],
-  "pagination": {
-    "totalCount": 42,
-    "page": 1,
-    "pageSize": 10,
-    "totalPages": 5,
-    "hasPreviousPage": false,
-    "hasNextPage": true
-  },
-  "errors": []
-}
-```
+| Status | When |
+|--------|------|
+| 400 | Validation failed (`message: "Validation failed."`, `errors: [...]`) or a business rule was broken |
+| 401 | Missing / invalid token, wrong credentials |
+| 403 | Signed in but not allowed (wrong role, not enrolled) |
+| 404 | Resource not found (draft courses are reported as 404 to non-staff) |
+| 409 | Duplicate (email already used, already enrolled) |
+| 503 | AI service unavailable |
+
+Enums are sent and received as names: `"level": "Beginner"`, `"role": "Instructor"`.
+
+**Query parameters** for list endpoints: `pageNumber` (default 1), `pageSize` (default 10, max 100),
+`sortBy` — a field name, prefixed with `-` for descending (e.g. `sortBy=-createdAt`).
 
 ---
 
-## 🔍 Query Parameters (example for `/api/courses`)
+## 📡 API Endpoints (v1)
 
-| Param | Type | Description |
-|-------|------|-------------|
-| `page` | int | Page number (default: 1) |
-| `pageSize` | int | Items per page (default: 10, max: 100) |
-| `search` | string | Search in title/description |
-| `category` | string | Filter by category |
-| `level` | string | `Beginner` / `Intermediate` / `Advanced` |
-| `isPublished` | bool | Filter published/draft |
-| `sortBy` | string | `title`, `category`, `totalLessons`, `createdAt` |
-| `sortDesc` | bool | Sort descending (default: false) |
+🌐 public · 🔑 signed in · 🎓 Admin or Instructor · 👑 Admin
+
+### Auth `/api/v1/auth`
+| Method | Route | Access | Description |
+|--------|-------|--------|-------------|
+| POST | `/register` | 🌐 | Create a Student account, returns tokens |
+| POST | `/login` | 🌐 | Returns access + refresh token |
+| POST | `/refresh` | 🌐 | Rotate refresh token, new access token |
+| POST | `/logout` | 🔑 | Revoke refresh token |
+
+### Me `/api/v1/me` — the user id always comes from the token
+| Method | Route | Access | Description |
+|--------|-------|--------|-------------|
+| GET | `/` | 🔑 | Profile + enrollment history |
+| PUT | `/` | 🔑 | Update name / avatar / bio |
+| GET | `/courses` | 🔑 | Enrolled courses with progress |
+| GET | `/courses/{courseId}/progress` | 🔑 | Progress summary in one course |
+| GET | `/lessons/{lessonId}/progress` | 🔑 | Progress on one lesson |
+| PUT | `/lessons/{lessonId}/progress` | 🔑 | Save video position / scroll / checkpoints (upsert) |
+
+### Courses `/api/v1/courses`
+| Method | Route | Access | Description |
+|--------|-------|--------|-------------|
+| GET | `/` | 🌐 | Paged list (`search`, `category`, `level`, `isPublished`*) |
+| GET | `/{id}` · `/slug/{slug}` | 🌐 | Course detail + lesson outline |
+| GET | `/category/{category}` | 🌐 | Published courses of a category |
+| GET | `/{id}/lessons` | 🌐 | Lessons with lock state (+ your progress when signed in) |
+| POST | `/{id}/enroll` | 🔑 | Enroll yourself in a **free** course |
+| POST · PUT · DELETE | `/` · `/{id}` | 🎓 | Manage courses |
+
+\* `isPublished=false` only has effect for staff; everyone else always gets published courses.
+
+### Lessons `/api/v1/lessons`
+| Method | Route | Access | Description |
+|--------|-------|--------|-------------|
+| GET | `/{id}` | 🌐 / 🔑 | Full content. Free lessons are public; paid lessons need an enrollment |
+| POST | `/{id}/complete` | 🔑 | Mark completed; course % is recalculated on the server |
+| GET | `/` | 🎓 | Paged list with content |
+| POST · PUT · DELETE | `/` · `/{id}` | 🎓 | Manage lessons (course totals kept in sync) |
+
+### Enrollments `/api/v1/enrollments`
+| Method | Route | Access | Description |
+|--------|-------|--------|-------------|
+| GET | `/` · `/{id}` | 🎓 | Paged list (`userId`, `courseId`) / detail |
+| POST | `/` | 👑 | Grant access to any course without payment |
+| DELETE | `/{id}` | 👑 | Remove an enrollment |
+
+### Progress `/api/v1/progress`
+| Method | Route | Access | Description |
+|--------|-------|--------|-------------|
+| GET | `/` | 🎓 | Paged progress records (`userId`, `lessonId`, `completed`) |
+
+### Payment `/api/v1/payment`
+| Method | Route | Access | Description |
+|--------|-------|--------|-------------|
+| POST | `/create-link` · `/create-pro-link` · `/create-deposit-link` | 🔑 | PayOS checkout links |
+| POST | `/buy-pro-balance` | 🔑 | Buy PRO with wallet balance |
+| GET | `/balance` · `/transactions` | 🔑 | Wallet balance / own transactions (staff see all) |
+| GET | `/stats` | 👑 | Revenue statistics |
+| POST | `/webhook` | 🌐 | PayOS webhook (signature verified). Also served at the legacy `/api/payment/webhook` |
+
+> Payment responses do not use the envelope yet — that is part of the payment refactor (phase 3).
+
+### Chat `/api/v1/chat`
+| Method | Route | Access | Description |
+|--------|-------|--------|-------------|
+| POST | `/` | 🔑 | AI coding assistant (Gemini), with prompt-injection guard |
 
 ---
 
-## 🏗️ Architecture Notes
+## 🔁 Migrating from the unversioned API
 
-- **Domain** has zero dependencies — pure POCO entities.
-- **Repositories** depend only on Domain + EF Core.
-- **Services** depend only on Domain + Repositories interfaces — fully testable with mocks.
-- **API** wires everything via DI; controllers are thin delegates to services.
-- Entity models are **never exposed directly** — all responses use DTOs.
-- `GlobalExceptionMiddleware` catches unhandled exceptions and returns a structured `500` response.
-- Course `TotalLessons` and `TotalDurationMinutes` are kept in sync automatically when lessons are created/updated/deleted.
+| Before | Now |
+|--------|-----|
+| `/api/...` | `/api/v1/...` |
+| `data: [...]` + `pagination: {...}` | `data: { items: [...], pageNumber, ... }` |
+| `?page=2&sortBy=title&sortDesc=true` | `?pageNumber=2&sortBy=-title` |
+| `GET /api/auth/me` | `GET /api/v1/me` |
+| `GET /api/users/me/courses` | `GET /api/v1/me/courses` |
+| `GET /api/courses/{id}/progress` | `GET /api/v1/me/courses/{id}/progress` |
+| `POST /api/enrollments` (anyone) | `POST /api/v1/courses/{id}/enroll` (self, free courses) · `POST /api/v1/enrollments` (Admin) |
+| `GET /api/enrollments/user/{userId}` | `GET /api/v1/me/courses` · `GET /api/v1/enrollments?userId=` (staff) |
+| `PATCH /api/enrollments/{id}/progress` | removed — progress is calculated on the server |
+| `POST /api/progress/upsert`, `POST/PUT /api/progress` | `PUT /api/v1/me/lessons/{lessonId}/progress` |
+| `GET /api/progress/user/{userId}/lesson/{lessonId}` | `GET /api/v1/me/lessons/{lessonId}/progress` |
+| `POST /api/lessons/{id}/complete` with `{ courseProgress }` | same route under `/api/v1`, **no body** |
+| `level` / `role` sent as strings | unchanged on the wire; now validated as enums |
 
 ---
 
@@ -202,8 +191,10 @@ Paginated responses include:
 
 | Layer | Technology |
 |-------|-----------|
-| Framework | ASP.NET Core 8 |
-| ORM | Entity Framework Core 8 (Code First) |
-| Database | SQL Server (LocalDB for dev) |
-| API Docs | Swashbuckle / Swagger UI |
-| Architecture | Repository + Service pattern |
+| Framework | ASP.NET Core 9 |
+| ORM / DB | Entity Framework Core 9 (Code First), SQL Server |
+| Auth | JWT Bearer + rotating refresh tokens, BCrypt, role-based authorization |
+| Validation | FluentValidation |
+| API | Asp.Versioning (URL segment), Swagger / OpenAPI |
+| Integrations | PayOS (payments), Google Gemini (AI chat) |
+| Tests / CI | xUnit, EF Core InMemory, WebApplicationFactory, GitHub Actions |

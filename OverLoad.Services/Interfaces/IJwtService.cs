@@ -1,16 +1,9 @@
-﻿using OverLoad.Domain.Entities;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using OverLoad.Domain.Entities;
 
-namespace OverLoad.Services.Interfaces
+namespace OverLoad.Services.Interfaces;
+
+public interface IJwtService
 {
-    public interface IJwtService
-    {
-        string GenerateAccessToken(User user);
-        string GenerateRefreshToken();
-        int? GetUserIdFromToken(string token);
-    }
+    string GenerateAccessToken(User user);
+    string GenerateRefreshToken();
 }

@@ -52,3 +52,5 @@ appsettings.Development.json
 .DS_Store
 # Windows
 Thumbs.db
+# Test results
+TestResults/

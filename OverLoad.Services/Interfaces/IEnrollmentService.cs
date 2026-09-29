@@ -6,13 +6,16 @@ namespace OverLoad.Services.Interfaces;
 
 public interface IEnrollmentService
 {
-    Task<ApiResponse<EnrollmentResponse>> GetByIdAsync(int id);
-    Task<PagedResponse<EnrollmentResponse>> GetAllAsync(EnrollmentQueryParams query);
-    Task<ApiResponse<List<EnrollmentResponse>>> GetByUserIdAsync(int userId);
-    Task<ApiResponse<List<EnrollmentResponse>>> GetByCourseIdAsync(int courseId);
-    Task<ApiResponse<EnrollmentResponse>> EnrollAsync(CreateEnrollmentRequest request);
-    Task<ApiResponse<EnrollmentResponse>> UpdateProgressAsync(int id, UpdateEnrollmentRequest request);
-    Task<ApiResponse<bool>> UnenrollAsync(int id);
-    Task<ApiResponse<List<MyCourseResponse>>> GetMyCoursesAsync(int userId);
-    Task<ApiResponse<CourseProgressResponse>> GetCourseProgressAsync(int userId, int courseId);
+    Task<PagedResult<EnrollmentResponse>> GetAllAsync(EnrollmentQueryParams query);
+    Task<EnrollmentResponse> GetByIdAsync(int id);
+
+    /// <summary>A student enrolling themselves: only free, published courses.</summary>
+    Task<EnrollmentResponse> SelfEnrollAsync(int userId, int courseId);
+
+    /// <summary>An admin granting access to any course, bypassing payment.</summary>
+    Task<EnrollmentResponse> GrantAsync(CreateEnrollmentRequest request);
+
+    Task UnenrollAsync(int id);
+    Task<List<MyCourseResponse>> GetMyCoursesAsync(int userId);
+    Task<CourseProgressResponse> GetCourseProgressAsync(int userId, int courseId);
 }

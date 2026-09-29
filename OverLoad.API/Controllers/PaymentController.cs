@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -10,13 +11,15 @@ using PayOS.Models;
 using PayOS.Models.Webhooks;
 using PayOS.Models.V2.PaymentRequests;
 using PayOS.Models.V2.PaymentRequests.Invoices;
+using OverLoad.API.Common;
 using OverLoad.Domain.Entities;
 using OverLoad.Repositories.Data;
 
 namespace OverLoad.API.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/payment")]
 [Produces("application/json")]
 public class PaymentController : ControllerBase
 {
@@ -310,7 +313,12 @@ public class PaymentController : ControllerBase
     }
 
     /// <summary>Endpoint webhook nhận thông báo từ PayOS khi thanh toán thành công</summary>
+    /// <remarks>
+    /// The unversioned /api/payment/webhook route is kept because it is the URL registered in the
+    /// PayOS dashboard; remove it once the dashboard points at /api/v1/payment/webhook.
+    /// </remarks>
     [HttpPost("webhook")]
+    [HttpPost("/api/payment/webhook")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> HandleWebhook([FromBody] Webhook webhookBody)
@@ -413,7 +421,7 @@ public class PaymentController : ControllerBase
 
     /// <summary>Lấy thông tin thống kê doanh thu</summary>
     [HttpGet("stats")]
-    [Authorize]
+    [Authorize(Roles = Roles.Admin)]
     public async Task<IActionResult> GetStats()
     {
         var successTransactions = await _context.Transactions

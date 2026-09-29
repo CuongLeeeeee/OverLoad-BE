@@ -1,31 +1,19 @@
-using System.ComponentModel.DataAnnotations;
+using OverLoad.Services.Common;
 
 namespace OverLoad.Services.DTOs.Request;
 
+/// <summary>Admin-only: grant a user access to a course without going through payment.</summary>
 public class CreateEnrollmentRequest
 {
-    [Required]
     public int UserId { get; set; }
-
-    [Required]
     public int CourseId { get; set; }
 }
 
-public class UpdateEnrollmentRequest
+public class EnrollmentQueryParams : QueryParameters
 {
-    [Range(0, 100)]
-    public decimal ProgressPercentage { get; set; }
-
-    public DateTime? CompletedAt { get; set; }
-    public DateTime? LastAccessedAt { get; set; }
-}
-
-public class EnrollmentQueryParams
-{
-    public int Page { get; set; } = 1;
-    public int PageSize { get; set; } = 10;
     public int? UserId { get; set; }
     public int? CourseId { get; set; }
-    public string? SortBy { get; set; } = "enrolledAt";
-    public bool SortDesc { get; set; } = true;
+
+    /// <summary>enrolledAt, progress. Prefix with '-' for descending.</summary>
+    public override string? SortBy { get; set; } = "-enrolledAt";
 }

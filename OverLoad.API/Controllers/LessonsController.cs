@@ -1,14 +1,21 @@
+using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OverLoad.API.Common;
+using OverLoad.API.Extensions;
+using OverLoad.Services.Common;
 using OverLoad.Services.DTOs.Request;
+using OverLoad.Services.DTOs.Response;
 using OverLoad.Services.Interfaces;
 
 namespace OverLoad.API.Controllers;
 
-/// <summary>Manage lessons within courses.</summary>
+/// <summary>Lessons within courses. Lesson content of paid courses requires enrollment.</summary>
 [ApiController]
-[Route("api/[controller]")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/lessons")]
 [Produces("application/json")]
+[Authorize]
 public class LessonsController : ControllerBase
 {
     private readonly ILessonService _lessonService;
@@ -20,80 +27,55 @@ public class LessonsController : ControllerBase
         _progressService = progressService;
     }
 
-    /// <summary>Get a paginated list of lessons with optional filtering by course.</summary>
+    /// <summary>Paginated list of lessons with full content (staff only; learners use /courses/{id}/lessons).</summary>
     [HttpGet]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetAll([FromQuery] LessonQueryParams query)
-        => Ok(await _lessonService.GetAllAsync(query));
+    [Authorize(Roles = Roles.Staff)]
+    public async Task<ActionResult<ApiResponse<PagedResult<LessonResponse>>>> GetAll([FromQuery] LessonQueryParams query)
+        => Ok(ApiResponse<PagedResult<LessonResponse>>.Ok(await _lessonService.GetAllAsync(query)));
 
-    /// <summary>Get a lesson by ID (includes full content and course info).</summary>
+    /// <summary>A lesson with its full content. Free lessons are public; paid ones need an enrollment.</summary>
     [HttpGet("{id:int}")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetById(int id)
-    {
-        var result = await _lessonService.GetByIdAsync(id);
-        if (!result.Success) return NotFound(result);
-        return Ok(result);
-    }
+    public async Task<ActionResult<ApiResponse<LessonResponse>>> GetById(int id)
+        => Ok(ApiResponse<LessonResponse>.Ok(await _lessonService.GetByIdAsync(id, User.FindUserId(), User.IsStaff())));
 
-    /// <summary>Create a new lesson. OrderIndex is auto-assigned as the next available slot.</summary>
+    /// <summary>Create a lesson. OrderIndex is assigned as the next free slot.</summary>
     [HttpPost]
+    [Authorize(Roles = Roles.Staff)]
     [ProducesResponseType(StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Create([FromBody] CreateLessonRequest request)
+    public async Task<ActionResult<ApiResponse<LessonResponse>>> Create([FromBody] CreateLessonRequest request)
     {
-        if (!ModelState.IsValid) return BadRequest(ModelState);
-
-        var result = await _lessonService.CreateAsync(request);
-        if (!result.Success)
-            return result.Message.Contains("not found") ? NotFound(result) : BadRequest(result);
-        return CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, result);
+        var created = await _lessonService.CreateAsync(request);
+        return CreatedAtAction(nameof(GetById), new { id = created.Id },
+            ApiResponse<LessonResponse>.Ok(created, "Lesson created successfully."));
     }
 
     /// <summary>Update a lesson, including reordering via OrderIndex.</summary>
     [HttpPut("{id:int}")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [Authorize(Roles = Roles.Staff)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Update(int id, [FromBody] UpdateLessonRequest request)
-    {
-        if (!ModelState.IsValid) return BadRequest(ModelState);
+    public async Task<ActionResult<ApiResponse<LessonResponse>>> Update(int id, [FromBody] UpdateLessonRequest request)
+        => Ok(ApiResponse<LessonResponse>.Ok(await _lessonService.UpdateAsync(id, request), "Lesson updated successfully."));
 
-        var result = await _lessonService.UpdateAsync(id, request);
-        if (!result.Success)
-            return result.Message.Contains("not found") ? NotFound(result) : BadRequest(result);
-        return Ok(result);
-    }
-
-    /// <summary>Delete a lesson. Course totals (duration, count) are recalculated automatically.</summary>
+    /// <summary>Delete a lesson. Course totals are recalculated.</summary>
     [HttpDelete("{id:int}")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
+    [Authorize(Roles = Roles.Staff)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Delete(int id)
+    public async Task<ActionResult<ApiResponse<object?>>> Delete(int id)
     {
-        var result = await _lessonService.DeleteAsync(id);
-        if (!result.Success) return NotFound(result);
-        return Ok(result);
+        await _lessonService.DeleteAsync(id);
+        return Ok(ApiResponse.Ok("Lesson deleted successfully."));
     }
-    /// <summary>Mark a lesson as completed for the authenticated user.</summary>
-    [HttpPost("{lessonId:int}/complete")]
-    [Authorize]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+
+    /// <summary>Mark a lesson as completed for the signed-in user. Course progress is recalculated on the server.</summary>
+    [HttpPost("{id:int}/complete")]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> CompleteLesson(int lessonId, [FromBody] CompleteLessonRequest request)
-    {
-        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)
-                       ?? User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub);
-
-        if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out var userId))
-            return Unauthorized(new { success = false, message = "Invalid token." });
-
-        var result = await _progressService.CompleteLessonAsync(userId, lessonId, request);
-        if (!result.Success)
-            return result.Message.Contains("not found") ? NotFound(result) : BadRequest(result);
-        return Ok(result);
-    }
+    public async Task<ActionResult<ApiResponse<ProgressResponse>>> Complete(int id)
+        => Ok(ApiResponse<ProgressResponse>.Ok(
+            await _progressService.CompleteLessonAsync(User.GetUserId(), id), "Lesson marked as completed."));
 }

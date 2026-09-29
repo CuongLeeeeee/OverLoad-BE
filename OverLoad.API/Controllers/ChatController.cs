@@ -1,13 +1,17 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Asp.Versioning;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using OverLoad.API.Common;
 using OverLoad.Services.DTOs.Request;
+using OverLoad.Services.DTOs.Response;
 using OverLoad.Services.Interfaces;
 
 namespace OverLoad.API.Controllers;
 
 /// <summary>AI coding assistant powered by Gemini.</summary>
 [ApiController]
-[Route("api/[controller]")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/chat")]
 [Produces("application/json")]
 [Authorize]
 public class ChatController : ControllerBase
@@ -25,7 +29,7 @@ public class ChatController : ControllerBase
     /// <remarks>
     /// Example request:
     ///
-    ///     POST /api/chat
+    ///     POST /api/v1/chat
     ///     {
     ///       "message": "Explain what async/await does in C#",
     ///       "recentHistory": [
@@ -37,13 +41,7 @@ public class ChatController : ControllerBase
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> Chat([FromBody] ChatRequest request)
-    {
-        if (!ModelState.IsValid) return BadRequest(ModelState);
-
-        var result = await _chatService.SendMessageAsync(request);
-        if (!result.Success) return StatusCode(500, result);
-        return Ok(result);
-    }
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<ApiResponse<ChatResponse>>> Chat([FromBody] ChatRequest request)
+        => Ok(ApiResponse<ChatResponse>.Ok(await _chatService.SendMessageAsync(request)));
 }
