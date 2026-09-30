@@ -4,10 +4,12 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using OverLoad.Domain.Entities;
 using OverLoad.Repositories.Data;
 using OverLoad.Services.Implementations;
+using OverLoad.Services.Interfaces;
 using OverLoad.Services.Settings;
 
 namespace OverLoad.Tests.Integration;
@@ -22,6 +24,8 @@ public class ApiFactory : WebApplicationFactory<Program>
     private readonly string _databaseName = Guid.NewGuid().ToString();
 
     public TestData.Seeded Data { get; private set; } = null!;
+
+    public FakePaymentGateway Gateway { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -45,6 +49,10 @@ public class ApiFactory : WebApplicationFactory<Program>
                 services.Remove(descriptor);
 
             services.AddDbContext<AppDbContext>(options => options.UseInMemoryDatabase(_databaseName));
+
+            // Never call the real PayOS from tests.
+            services.RemoveAll<IPaymentGateway>();
+            services.AddSingleton<IPaymentGateway>(Gateway);
         });
     }
 

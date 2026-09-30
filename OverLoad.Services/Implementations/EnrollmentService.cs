@@ -14,17 +14,20 @@ public class EnrollmentService : IEnrollmentService
     private readonly IUserRepository _userRepository;
     private readonly ICourseRepository _courseRepository;
     private readonly IUserLessonProgressRepository _progressRepository;
+    private readonly ICourseAccessService _courseAccess;
 
     public EnrollmentService(
         IEnrollmentRepository enrollmentRepository,
         IUserRepository userRepository,
         ICourseRepository courseRepository,
-        IUserLessonProgressRepository progressRepository)
+        IUserLessonProgressRepository progressRepository,
+        ICourseAccessService courseAccess)
     {
         _enrollmentRepository = enrollmentRepository;
         _userRepository = userRepository;
         _courseRepository = courseRepository;
         _progressRepository = progressRepository;
+        _courseAccess = courseAccess;
     }
 
     public async Task<PagedResult<EnrollmentResponse>> GetAllAsync(EnrollmentQueryParams query)
@@ -54,8 +57,8 @@ public class EnrollmentService : IEnrollmentService
         if (course == null || !course.IsPublished)
             throw new NotFoundException("Course", courseId);
 
-        if (course.Price > 0)
-            throw new BusinessRuleException("This is a paid course. Please purchase it to enroll.");
+        if (course.Price > 0 && !await _courseAccess.HasActiveProAsync(userId))
+            throw new BusinessRuleException("This is a paid course. Purchase it or upgrade to PRO to enroll.");
 
         return await CreateEnrollmentAsync(userId, course);
     }

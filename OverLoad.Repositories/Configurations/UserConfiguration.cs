@@ -19,6 +19,12 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.Role).HasConversion<string>();
         builder.Property(u => u.RefreshToken).HasMaxLength(500);
 
+        // Concurrency token: a wallet debit is written as "UPDATE ... WHERE WalletBalance = <value read>",
+        // so two simultaneous purchases cannot both spend the same money.
+        builder.Property(u => u.WalletBalance).HasPrecision(18, 2).HasDefaultValue(0m).IsConcurrencyToken();
+        // Same for PRO: two renewals landing at once must stack, not overwrite each other.
+        builder.Property(u => u.ProExpiresAt).IsConcurrencyToken();
+
         builder.HasMany(u => u.Enrollments)
                .WithOne(e => e.User)
                .HasForeignKey(e => e.UserId)

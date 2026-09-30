@@ -13,18 +13,18 @@ public class LessonService : ILessonService
     private readonly ILessonRepository _lessonRepository;
     private readonly ICourseRepository _courseRepository;
     private readonly IUserLessonProgressRepository _progressRepository;
-    private readonly IEnrollmentRepository _enrollmentRepository;
+    private readonly ICourseAccessService _courseAccess;
 
     public LessonService(
         ILessonRepository lessonRepository,
         ICourseRepository courseRepository,
         IUserLessonProgressRepository progressRepository,
-        IEnrollmentRepository enrollmentRepository)
+        ICourseAccessService courseAccess)
     {
         _lessonRepository = lessonRepository;
         _courseRepository = courseRepository;
         _progressRepository = progressRepository;
-        _enrollmentRepository = enrollmentRepository;
+        _courseAccess = courseAccess;
     }
 
     public async Task<PagedResult<LessonResponse>> GetAllAsync(LessonQueryParams query)
@@ -48,8 +48,8 @@ public class LessonService : ILessonService
             if (userId == null)
                 throw new UnauthorizedException("Sign in to access this lesson.");
 
-            if (!await _enrollmentRepository.IsEnrolledAsync(userId.Value, lesson.CourseId))
-                throw new ForbiddenException("Enroll in this course to access this lesson.");
+            if (!await _courseAccess.HasPaidContentAccessAsync(userId.Value, lesson.CourseId))
+                throw new ForbiddenException("Enroll in this course or upgrade to PRO to access this lesson.");
         }
 
         return MapToResponse(lesson);
@@ -65,11 +65,11 @@ public class LessonService : ILessonService
             .OrderBy(l => l.OrderIndex)
             .ToList();
 
-        var isEnrolled = false;
+        var hasAccess = false;
         List<UserLessonProgress> progressList = new();
         if (userId.HasValue)
         {
-            isEnrolled = await _enrollmentRepository.IsEnrolledAsync(userId.Value, courseId);
+            hasAccess = await _courseAccess.HasPaidContentAccessAsync(userId.Value, courseId);
 
             var lessonIds = lessonList.Select(l => l.Id).ToHashSet();
             progressList = (await _progressRepository.GetByUserIdAsync(userId.Value))
@@ -81,12 +81,12 @@ public class LessonService : ILessonService
         {
             var progress = progressList.FirstOrDefault(p => p.LessonId == lesson.Id);
 
-            // A paid lesson unlocks once the user is enrolled and has completed the previous lesson.
+            // A paid lesson unlocks once the user has access (enrolled or PRO) and has completed the previous lesson.
             var previousLesson = lessonList.FirstOrDefault(l => l.OrderIndex == lesson.OrderIndex - 1);
             var previousCompleted = previousLesson == null
                 || progressList.Any(p => p.LessonId == previousLesson.Id && p.Completed);
 
-            var isLocked = !isStaff && !lesson.IsFree && (!isEnrolled || !previousCompleted);
+            var isLocked = !isStaff && !lesson.IsFree && (!hasAccess || !previousCompleted);
 
             var watchPercentage = progress != null && lesson.DurationMinutes > 0
                 ? Math.Clamp(

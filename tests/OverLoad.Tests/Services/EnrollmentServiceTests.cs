@@ -13,7 +13,8 @@ public class EnrollmentServiceTests
         new EnrollmentRepository(context),
         new UserRepository(context),
         new CourseRepository(context),
-        new UserLessonProgressRepository(context));
+        new UserLessonProgressRepository(context),
+        TestData.CourseAccess(context));
 
     [Fact]
     public async Task SelfEnrollAsync_Should_Enroll_In_Free_Published_Course()

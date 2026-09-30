@@ -26,9 +26,15 @@ public class AuthorizationTests : IClassFixture<ApiFactory>, IAsyncLifetime
     [InlineData("GET", "/api/v1/me")]
     [InlineData("GET", "/api/v1/enrollments")]
     [InlineData("GET", "/api/v1/progress")]
-    [InlineData("GET", "/api/v1/payment/stats")]
+    [InlineData("GET", "/api/v1/admin/revenue-stats")]
+    [InlineData("GET", "/api/v1/admin/transactions")]
     [InlineData("POST", "/api/v1/courses/1/enroll")]
     [InlineData("POST", "/api/v1/chat")]
+    [InlineData("GET", "/api/v1/me/wallet")]
+    [InlineData("GET", "/api/v1/me/transactions")]
+    [InlineData("POST", "/api/v1/me/wallet/purchase-pro")]
+    [InlineData("POST", "/api/v1/payment/checkout")]
+    [InlineData("GET", "/api/v1/payment/orders/1")]
     public async Task Protected_Endpoints_Should_Return_401_Envelope_For_Anonymous(string method, string url)
     {
         var response = await _factory.CreateClient().SendAsync(new HttpRequestMessage(new HttpMethod(method), url));
@@ -44,7 +50,8 @@ public class AuthorizationTests : IClassFixture<ApiFactory>, IAsyncLifetime
     [InlineData("GET", "/api/v1/enrollments")]
     [InlineData("GET", "/api/v1/progress")]
     [InlineData("GET", "/api/v1/lessons")]
-    [InlineData("GET", "/api/v1/payment/stats")]
+    [InlineData("GET", "/api/v1/admin/revenue-stats")]
+    [InlineData("GET", "/api/v1/admin/transactions")]
     [InlineData("DELETE", "/api/v1/courses/1")]
     public async Task Admin_Or_Staff_Endpoints_Should_Return_403_For_Student(string method, string url)
     {

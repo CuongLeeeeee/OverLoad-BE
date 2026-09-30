@@ -1,38 +1,32 @@
-using System;
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
+using OverLoad.Domain.Enums;
 
 namespace OverLoad.Domain.Entities;
 
 public class Transaction
 {
-    [Key]
-    [Column("transaction_id")]
-    [MaxLength(50)]
+    /// <summary>PayOS payment link id, or "WALLET-{orderCode}" for wallet payments.</summary>
     public string TransactionId { get; set; } = string.Empty;
 
-    [Column("order_code")]
+    /// <summary>Unique order number shared with PayOS.</summary>
     public long OrderCode { get; set; }
 
-    [Column("user_id")]
     public int UserId { get; set; }
+    public TransactionType Type { get; set; }
+    public PaymentMethod Method { get; set; }
+    public TransactionStatus Status { get; set; } = TransactionStatus.Pending;
 
-    [Column("course_id")]
-    public int CourseId { get; set; }
+    /// <summary>Set for <see cref="TransactionType.CoursePurchase"/> only.</summary>
+    public int? CourseId { get; set; }
 
-    [Column("amount")]
+    /// <summary>Set for <see cref="TransactionType.ProUpgrade"/> only.</summary>
+    public ProPackage? ProPackage { get; set; }
+
+    /// <summary>Always positive; the direction follows from Type and Method.</summary>
     public decimal Amount { get; set; }
-
-    [Column("currency")]
-    [MaxLength(10)]
     public string Currency { get; set; } = "VND";
 
-    [Column("status")]
-    [MaxLength(20)]
-    public string Status { get; set; } = "PENDING";
-
-    [Column("payment_time")]
-    public DateTime PaymentTime { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? PaidAt { get; set; }
 
     // Navigation properties
     public User? User { get; set; }

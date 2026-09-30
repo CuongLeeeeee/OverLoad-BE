@@ -152,13 +152,36 @@ Enums are sent and received as names: `"level": "Beginner"`, `"role": "Instructo
 ### Payment `/api/v1/payment`
 | Method | Route | Access | Description |
 |--------|-------|--------|-------------|
-| POST | `/create-link` · `/create-pro-link` · `/create-deposit-link` | 🔑 | PayOS checkout links |
-| POST | `/buy-pro-balance` | 🔑 | Buy PRO with wallet balance |
-| GET | `/balance` · `/transactions` | 🔑 | Wallet balance / own transactions (staff see all) |
-| GET | `/stats` | 👑 | Revenue statistics |
-| POST | `/webhook` | 🌐 | PayOS webhook (signature verified). Also served at the legacy `/api/payment/webhook` |
+| POST | `/checkout` | 🔑 | Start a PayOS payment: `{ "type": "Course", "courseId": 1 }` · `{ "type": "Pro", "package": "Month" \| "Year" }` · `{ "type": "Deposit", "amount": 100000 }`. Returns `orderCode` + `checkoutUrl` |
+| GET | `/orders/{orderCode}` | 🔑 | Status of your order (refreshed from PayOS while pending) — call it from the return page |
+| POST | `/webhook` | 🌐 | PayOS webhook (signature verified, idempotent). Also served at the legacy `/api/payment/webhook` |
 
-> Payment responses do not use the envelope yet — that is part of the payment refactor (phase 3).
+### Wallet & history `/api/v1/me`
+| Method | Route | Access | Description |
+|--------|-------|--------|-------------|
+| GET | `/wallet` | 🔑 | `{ balance, isPro, proExpiresAt }` |
+| POST | `/wallet/purchase-pro` | 🔑 | `{ "package": "Month" \| "Year" }` — pay PRO from the wallet |
+| GET | `/transactions` | 🔑 | Your payment history (`type`, `status` filters) |
+
+### Admin `/api/v1/admin`
+| Method | Route | Access | Description |
+|--------|-------|--------|-------------|
+| GET | `/transactions` | 👑 | All transactions (`userId`, `type`, `status` filters) |
+| GET | `/revenue-stats` | 👑 | Revenue received through PayOS, courses / PRO sold, outstanding wallet balance |
+
+**How payments work**
+- A transaction has a `type` (`CoursePurchase`, `ProUpgrade`, `Deposit`), a `method` (`PayOS`, `Wallet`) and a `status` (`Pending`, `Success`, `Cancelled`). Amounts are always positive.
+- An order is fulfilled exactly once — by the webhook, or by the status sync that runs on `/orders/{code}`, `/me/wallet` and `/me/transactions` when the webhook is late. The `status` column is a concurrency token, so a race between the two cannot enroll or credit twice.
+- `Users.WalletBalance` is a concurrency token too: two simultaneous PRO purchases cannot overdraw the wallet.
+- **PRO** (`Users.ProExpiresAt`) gives access to every paid course until it expires. Buying again while active extends from the current expiry. PRO users can also `POST /courses/{id}/enroll` on paid courses to track progress there.
+- Prices, deposit limits and the frontend URL come from the `Payment` settings. Client-supplied `returnUrl` / `cancelUrl` must be on `FrontendBaseUrl`.
+
+### Deploying the payment migration
+`20260929082137_RefactorPaymentsAndWallet` converts existing payment data (see the summary at the top of the file):
+types and methods are derived from the old system courses, wallet balances and PRO expiry are computed from past
+transactions, and the `system-deposit-balance` / `pro-upgrade-*` courses and their enrollments are deleted.
+**Back up the database first** — the migration cannot be rolled back (`Down()` throws). It was verified on
+SQL Server LocalDB against a copy of the old schema with sample data.
 
 ### Chat `/api/v1/chat`
 | Method | Route | Access | Description |
@@ -184,6 +207,16 @@ Enums are sent and received as names: `"level": "Beginner"`, `"role": "Instructo
 | `GET /api/progress/user/{userId}/lesson/{lessonId}` | `GET /api/v1/me/lessons/{lessonId}/progress` |
 | `POST /api/lessons/{id}/complete` with `{ courseProgress }` | same route under `/api/v1`, **no body** |
 | `level` / `role` sent as strings | unchanged on the wire; now validated as enums |
+| `POST /api/payment/create-link` `{ courseId }` | `POST /api/v1/payment/checkout` `{ type: "Course", courseId }` |
+| `POST /api/payment/create-pro-link` `{ packageType: "month" }` | `POST /api/v1/payment/checkout` `{ type: "Pro", package: "Month" }` |
+| `POST /api/payment/create-deposit-link` `{ amount }` | `POST /api/v1/payment/checkout` `{ type: "Deposit", amount }` |
+| response `{ checkoutUrl }` | `data: { orderCode, amount, checkoutUrl }` |
+| `POST /api/payment/buy-pro-balance` | `POST /api/v1/me/wallet/purchase-pro` `{ package }` |
+| `GET /api/payment/balance` → `{ balance }` | `GET /api/v1/me/wallet` → `data: { balance, isPro, proExpiresAt }` |
+| `GET /api/payment/transactions` (own; staff saw all) | `GET /api/v1/me/transactions` (own) · `GET /api/v1/admin/transactions` (Admin) |
+| `GET /api/payment/stats` | `GET /api/v1/admin/revenue-stats` (Admin) |
+| transaction `status: "SUCCESS"`, negative `amount` for wallet spending | `status: "Success"`, positive `amount` + `method: "Wallet"` |
+| PRO = enrollment in a hidden `pro-upgrade-*` course | `isPro` / `proExpiresAt` on `/me` and `/me/wallet` |
 
 ---
 

@@ -13,7 +13,8 @@ public class ProgressServiceTests
     private static ProgressService CreateService(AppDbContext context) => new(
         new UserLessonProgressRepository(context),
         new LessonRepository(context),
-        new EnrollmentRepository(context));
+        new EnrollmentRepository(context),
+        TestData.CourseAccess(context));
 
     [Fact]
     public async Task CompleteLessonAsync_Should_Recalculate_Course_Progress_On_The_Server()

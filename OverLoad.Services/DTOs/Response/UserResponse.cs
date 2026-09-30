@@ -9,6 +9,8 @@ public class UserResponse
     public string? Bio { get; set; }
     public string Role { get; set; } = string.Empty;
     public bool IsVerified { get; set; }
+    public bool IsPro { get; set; }
+    public DateTime? ProExpiresAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

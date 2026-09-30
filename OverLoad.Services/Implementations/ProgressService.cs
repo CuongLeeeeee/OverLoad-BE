@@ -13,15 +13,18 @@ public class ProgressService : IProgressService
     private readonly IUserLessonProgressRepository _progressRepository;
     private readonly ILessonRepository _lessonRepository;
     private readonly IEnrollmentRepository _enrollmentRepository;
+    private readonly ICourseAccessService _courseAccess;
 
     public ProgressService(
         IUserLessonProgressRepository progressRepository,
         ILessonRepository lessonRepository,
-        IEnrollmentRepository enrollmentRepository)
+        IEnrollmentRepository enrollmentRepository,
+        ICourseAccessService courseAccess)
     {
         _progressRepository = progressRepository;
         _lessonRepository = lessonRepository;
         _enrollmentRepository = enrollmentRepository;
+        _courseAccess = courseAccess;
     }
 
     public async Task<PagedResult<ProgressResponse>> GetAllAsync(ProgressQueryParams query)
@@ -100,14 +103,14 @@ public class ProgressService : IProgressService
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    /// <summary>Free lessons are open to any signed-in user; paid lessons need an enrollment.</summary>
+    /// <summary>Free lessons are open to any signed-in user; paid lessons need an enrollment or PRO.</summary>
     private async Task<Lesson> GetAccessibleLessonAsync(int userId, int lessonId)
     {
         var lesson = await _lessonRepository.GetByIdAsync(lessonId)
             ?? throw new NotFoundException("Lesson", lessonId);
 
-        if (!lesson.IsFree && !await _enrollmentRepository.IsEnrolledAsync(userId, lesson.CourseId))
-            throw new ForbiddenException("Enroll in this course to track progress on this lesson.");
+        if (!lesson.IsFree && !await _courseAccess.HasPaidContentAccessAsync(userId, lesson.CourseId))
+            throw new ForbiddenException("Enroll in this course or upgrade to PRO to track progress on this lesson.");
 
         return lesson;
     }

@@ -49,4 +49,7 @@ public class UserRepository : BaseRepository<User>, IUserRepository
     }
     public async Task<User?> GetByRefreshTokenAsync(string refreshToken)
     => await _dbSet.FirstOrDefaultAsync(u => u.RefreshToken == refreshToken);
+
+    public async Task<decimal> GetTotalWalletBalanceAsync()
+        => await _dbSet.SumAsync(u => u.WalletBalance);
 }

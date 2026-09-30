@@ -9,7 +9,7 @@ public interface IEnrollmentService
     Task<PagedResult<EnrollmentResponse>> GetAllAsync(EnrollmentQueryParams query);
     Task<EnrollmentResponse> GetByIdAsync(int id);
 
-    /// <summary>A student enrolling themselves: only free, published courses.</summary>
+    /// <summary>A user enrolling themselves in a published course: free courses, or any course with active PRO.</summary>
     Task<EnrollmentResponse> SelfEnrollAsync(int userId, int courseId);
 
     /// <summary>An admin granting access to any course, bypassing payment.</summary>

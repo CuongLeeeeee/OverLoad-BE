@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using OverLoad.Domain.Entities;
 using OverLoad.Domain.Enums;
 using OverLoad.Repositories.Data;
+using OverLoad.Repositories.Implementations;
+using OverLoad.Services.Implementations;
 
 namespace OverLoad.Tests;
 
@@ -49,6 +51,15 @@ public static class TestData
         await context.SaveChangesAsync();
 
         return new Seeded(admin, instructor, student, freeCourse, paidCourse, draftCourse, paidLessons, freeLesson, draftLesson);
+    }
+
+    public static CourseAccessService CourseAccess(AppDbContext context)
+        => new(new EnrollmentRepository(context), new UserRepository(context));
+
+    public static async Task MakeProAsync(AppDbContext context, User user, DateTime? expiresAt = null)
+    {
+        user.ProExpiresAt = expiresAt ?? DateTime.UtcNow.AddMonths(1);
+        await context.SaveChangesAsync();
     }
 
     public static async Task EnrollAsync(AppDbContext context, User user, Course course)

@@ -176,9 +176,15 @@ namespace OverLoad.Repositories.Migrations
                         .HasColumnType("decimal(18,2)")
                         .HasColumnName("amount");
 
-                    b.Property<int>("CourseId")
+                    b.Property<int?>("CourseId")
                         .HasColumnType("int")
                         .HasColumnName("course_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("GETUTCDATE()");
 
                     b.Property<string>("Currency")
                         .IsRequired()
@@ -188,21 +194,37 @@ namespace OverLoad.Repositories.Migrations
                         .HasDefaultValue("VND")
                         .HasColumnName("currency");
 
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("method");
+
                     b.Property<long>("OrderCode")
                         .HasColumnType("bigint")
                         .HasColumnName("order_code");
 
-                    b.Property<DateTime>("PaymentTime")
-                        .ValueGeneratedOnAdd()
+                    b.Property<DateTime?>("PaidAt")
                         .HasColumnType("datetime2")
-                        .HasColumnName("payment_time")
-                        .HasDefaultValueSql("GETDATE()");
+                        .HasColumnName("paid_at");
+
+                    b.Property<string>("ProPackage")
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)")
+                        .HasColumnName("pro_package");
 
                     b.Property<string>("Status")
+                        .IsConcurrencyToken()
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)")
                         .HasColumnName("status");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("type");
 
                     b.Property<int>("UserId")
                         .HasColumnType("int")
@@ -212,7 +234,10 @@ namespace OverLoad.Repositories.Migrations
 
                     b.HasIndex("CourseId");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("OrderCode")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "Status");
 
                     b.ToTable("transactions", (string)null);
                 });
@@ -253,6 +278,10 @@ namespace OverLoad.Repositories.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateTime?>("ProExpiresAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("RefreshToken")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -266,6 +295,13 @@ namespace OverLoad.Repositories.Migrations
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<decimal>("WalletBalance")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(0m);
 
                     b.HasKey("Id");
 
@@ -359,8 +395,7 @@ namespace OverLoad.Repositories.Migrations
                     b.HasOne("OverLoad.Domain.Entities.Course", "Course")
                         .WithMany()
                         .HasForeignKey("CourseId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("OverLoad.Domain.Entities.User", "User")
                         .WithMany()

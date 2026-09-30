@@ -12,7 +12,7 @@ public class LessonServiceTests
         new LessonRepository(context),
         new CourseRepository(context),
         new UserLessonProgressRepository(context),
-        new EnrollmentRepository(context));
+        TestData.CourseAccess(context));
 
     [Fact]
     public async Task GetByIdAsync_Should_Return_Free_Lesson_To_Anonymous()

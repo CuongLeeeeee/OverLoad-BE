@@ -53,6 +53,8 @@ public class BaseRepository<T> : IBaseRepository<T> where T : class
         return entity;
     }
 
+    public virtual void Add(T entity) => _dbSet.Add(entity);
+
     public virtual async Task UpdateAsync(T entity)
     {
         _dbSet.Update(entity);

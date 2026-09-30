@@ -101,6 +101,8 @@ public class UserService : IUserService
         Bio = user.Bio,
         Role = user.Role.ToString(),
         IsVerified = user.IsVerified,
+        IsPro = user.HasActivePro(DateTime.UtcNow),
+        ProExpiresAt = user.ProExpiresAt,
         CreatedAt = user.CreatedAt,
         UpdatedAt = user.UpdatedAt
     };
@@ -114,6 +116,8 @@ public class UserService : IUserService
         Bio = user.Bio,
         Role = user.Role.ToString(),
         IsVerified = user.IsVerified,
+        IsPro = user.HasActivePro(DateTime.UtcNow),
+        ProExpiresAt = user.ProExpiresAt,
         CreatedAt = user.CreatedAt,
         UpdatedAt = user.UpdatedAt,
         Enrollments = user.Enrollments.Select(e => new EnrollmentSummaryResponse
