@@ -67,7 +67,7 @@ public class TransactionConfiguration : IEntityTypeConfiguration<Transaction>
 
         builder.Property(t => t.CreatedAt)
             .HasColumnName("created_at")
-            .HasDefaultValueSql("GETUTCDATE()");
+            .HasDefaultValueSql("now()");
 
         builder.Property(t => t.PaidAt)
             .HasColumnName("paid_at");

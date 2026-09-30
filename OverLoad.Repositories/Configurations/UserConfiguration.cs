@@ -25,7 +25,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.StudentCardPath).HasMaxLength(500);
         builder.Property(u => u.HasSeenStudentRejection).HasDefaultValue(false);
         builder.Property(u => u.AiQuestionsAskedToday).HasDefaultValue(0);
-        builder.Property(u => u.LastAiQuestionDate).HasDefaultValue(DateTime.MinValue);
+        builder.Property(u => u.LastAiQuestionDate).HasDefaultValue(DateTime.SpecifyKind(DateTime.MinValue, DateTimeKind.Utc));
 
         // Concurrency token: a wallet debit is written as "UPDATE ... WHERE WalletBalance = <value read>",
         // so two simultaneous purchases cannot both spend the same money.

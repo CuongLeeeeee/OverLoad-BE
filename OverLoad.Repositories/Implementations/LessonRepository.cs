@@ -33,8 +33,10 @@ public class LessonRepository : BaseRepository<Lesson>, ILessonRepository
         if (courseId.HasValue)
             query = query.Where(l => l.CourseId == courseId.Value);
 
-        if (!string.IsNullOrWhiteSpace(searchTerm))
-            query = query.Where(l => l.Title.Contains(searchTerm));
+        // Case-insensitive on every provider (PostgreSQL LIKE is case-sensitive).
+        var term = searchTerm?.Trim().ToLowerInvariant();
+        if (!string.IsNullOrWhiteSpace(term))
+            query = query.Where(l => l.Title.ToLower().Contains(term));
 
         if (isFree.HasValue)
             query = query.Where(l => l.IsFree == isFree.Value);

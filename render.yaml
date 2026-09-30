@@ -1,0 +1,38 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Render dashboard → New → Blueprint → pick this repo. Secrets marked "sync: false" are asked for
+# once in the dashboard and never stored in git.
+services:
+  - type: web
+    name: overload-api
+    runtime: docker
+    plan: free
+    region: singapore            # same region as the Neon database
+    branch: feature/postgres     # change to main once feature/postgres is merged
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true             # redeploy on every push to the branch above
+    envVars:
+      - key: PORT                # the image listens on 8080
+        value: "8080"
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: Database__MigrateOnStartup   # migrations are run by hand, after a backup
+        value: "false"
+      - key: Swagger__Enabled
+        value: "true"
+      - key: DATABASE_URL        # Neon *pooled* connection string (host contains -pooler)
+        sync: false
+      - key: Jwt__SecretKey      # 32+ random characters
+        generateValue: true
+      - key: Cors__AllowedOrigins__0   # the frontend origin, e.g. https://overload.vercel.app
+        sync: false
+      - key: Payment__FrontendBaseUrl  # same frontend origin
+        sync: false
+      - key: PayOS__ClientId
+        sync: false
+      - key: PayOS__ApiKey
+        sync: false
+      - key: PayOS__ChecksumKey
+        sync: false
+      - key: Gemini__ApiKey
+        sync: false

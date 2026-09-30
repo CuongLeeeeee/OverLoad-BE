@@ -21,6 +21,9 @@ using OverLoad.Services.Interfaces;
 using OverLoad.Services.Settings;
 using PayOS;
 
+// Local runs: pick up DATABASE_URL and other secrets from the repo's .env (never shipped in the image).
+DatabaseConnection.LoadDotEnv();
+
 var builder = WebApplication.CreateBuilder(args);
 
 // ── Settings (Options pattern) ────────────────────────────────────────────────
@@ -35,10 +38,11 @@ if (string.IsNullOrWhiteSpace(jwtSettings.SecretKey))
     throw new InvalidOperationException("Jwt:SecretKey is not configured.");
 
 // ── Database ─────────────────────────────────────────────────────────────────
+// DATABASE_URL (postgresql://...) or ConnectionStrings:DefaultConnection — see DatabaseConnection.
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection"),
-        sql => sql.MigrationsAssembly("OverLoad.Repositories")));
+    options.UseNpgsql(
+        DatabaseConnection.Resolve(builder.Configuration),
+        npgsql => npgsql.MigrationsAssembly("OverLoad.Repositories")));
 
 // ── Repositories ─────────────────────────────────────────────────────────────
 builder.Services.AddScoped<IUserRepository, UserRepository>();

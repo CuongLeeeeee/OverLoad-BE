@@ -31,10 +31,12 @@ public class CourseRepository : BaseRepository<Course>, ICourseRepository
     {
         var query = _dbSet.AsQueryable();
 
-        if (!string.IsNullOrWhiteSpace(searchTerm))
+        // Case-insensitive on every provider (PostgreSQL LIKE is case-sensitive).
+        var term = searchTerm?.Trim().ToLowerInvariant();
+        if (!string.IsNullOrWhiteSpace(term))
             query = query.Where(c =>
-                c.Title.Contains(searchTerm) ||
-                (c.Description != null && c.Description.Contains(searchTerm)));
+                c.Title.ToLower().Contains(term) ||
+                (c.Description != null && c.Description.ToLower().Contains(term)));
 
         if (!string.IsNullOrWhiteSpace(category))
             query = query.Where(c => c.Category == category);

@@ -1,24 +1,24 @@
-# Local development stack: the API plus its own SQL Server.
+# Local development stack: the API plus its own PostgreSQL.
 #   cp .env.example .env   (then fill in the values)
 #   docker compose up --build
-# API: http://localhost:8080 (Swagger at the root), SQL Server: localhost,1433
+# API: http://localhost:8080 (Swagger at the root), PostgreSQL: localhost:5432
 services:
   db:
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    image: postgres:16-alpine
     container_name: overload-db
     environment:
-      ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: ${DB_SA_PASSWORD:?Set DB_SA_PASSWORD in .env}
+      POSTGRES_DB: overload
+      POSTGRES_USER: overload
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
     ports:
-      - "1433:1433"
+      - "5432:5432"
     volumes:
-      - overload-db-data:/var/opt/mssql
+      - overload-db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q \"SELECT 1\" || exit 1"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U overload -d overload"]
+      interval: 5s
       timeout: 5s
       retries: 10
-      start_period: 20s
 
   api:
     build: .
@@ -30,7 +30,7 @@ services:
       - "8080:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development          # enables Swagger and migrate-on-startup
-      ConnectionStrings__DefaultConnection: "Server=db,1433;Database=OverLoadDb;User Id=sa;Password=${DB_SA_PASSWORD};TrustServerCertificate=True;"
+      ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=overload;Username=overload;Password=${DB_PASSWORD}"
       Jwt__SecretKey: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env}
       Gemini__ApiKey: ${GEMINI_API_KEY:-}
       PayOS__ClientId: ${PAYOS_CLIENT_ID:-}

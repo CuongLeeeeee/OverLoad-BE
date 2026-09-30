@@ -36,19 +36,19 @@ Request flow: `RequestModel` → validator → controller → `ToServiceDto()` �
 
 ## 🚀 Getting Started
 
-### Option A — Docker (API + SQL Server, nothing else to install)
+### Option A — Docker (API + PostgreSQL, nothing else to install)
 ```bash
 cp .env.example .env        # fill in JWT_SECRET_KEY (and PayOS / Gemini keys if needed)
 docker compose up --build
 ```
-API at http://localhost:8080 (Swagger at the root), SQL Server at `localhost,1433`. The database is
+API at http://localhost:8080 (Swagger at the root), PostgreSQL at `localhost:5432`. The database is
 created and migrated on startup; data lives in the `overload-db-data` volume.
 
 ### Option B — .NET SDK
 
 #### Prerequisites
 - [.NET 9 SDK](https://dotnet.microsoft.com/download)
-- SQL Server (LocalDB, Express, or full)
+- PostgreSQL 16 (local install, `docker run -e POSTGRES_PASSWORD=... -p 5432:5432 postgres:16-alpine`, or a free [Neon](https://neon.tech) database)
 
 ### 1. Configure
 Copy `appsettings.example.json` to `OverLoad.API/appsettings.json` and fill in the values.
@@ -77,7 +77,7 @@ No database is needed — tests use EF Core InMemory. CI runs the same command o
 
 | Setting (env var form) | Default | Purpose |
 |---|---|---|
-| `ConnectionStrings__DefaultConnection` | — | SQL Server connection string |
+| `ConnectionStrings__DefaultConnection` | — | PostgreSQL connection string, e.g. `Host=...;Database=...;Username=...;Password=...;SSL Mode=Require` (Neon needs SSL) |
 | `Jwt__SecretKey` | — (required) | Token signing key, 32+ characters |
 | `Cors__AllowedOrigins__0`, `__1`, ... | none | Origins allowed to call the API from a browser. Development allows any origin when none are set; other environments allow **none** |
 | `Payment__FrontendBaseUrl` | `http://localhost:3000` | Where PayOS sends buyers back to; return/cancel URLs must be on this origin |
@@ -207,25 +207,43 @@ Enums are sent and received as names: `"level": "Beginner"`, `"role": "Instructo
 - **PRO** (`Users.ProExpiresAt`) gives access to every paid course until it expires. Buying again while active extends from the current expiry. PRO users can also `POST /courses/{id}/enroll` on paid courses to track progress there.
 - Prices, deposit limits and the frontend URL come from the `Payment` settings. Client-supplied `returnUrl` / `cancelUrl` must be on `FrontendBaseUrl`.
 
-### Production schema reconciliation
-Production had five migrations applied from code that was later lost (`AddManagerRoleAndIsLocked`,
-`AddStudentVerificationFields`, `AddAiLimitsToUser`, `AddBugReports`, `AddBugReportAttachmentUrl`).
-`20260930060145_ReconcileProductionSchema` re-declares what they created — `Users.IsLocked`, the student
-verification and AI-limit columns, and the `BugReports` table — with the exact production definitions.
-Every statement is guarded (`IF COL_LENGTH ... IS NULL`), so it does nothing on production and creates the
-objects on a fresh database. Verified on LocalDB for both cases.
-
-- `IsLocked` is enforced again: locked accounts get **403** on login and refresh. Admins use
+### Accounts and data mapped from the old production database
+- `Users.IsLocked` is enforced: locked accounts get **403** on login and refresh. Admins use
   `POST /api/v1/users/{id}/lock` and `/unlock` (locking also revokes the refresh token).
-- The student-verification, AI-limit and bug-report **features** are not rebuilt yet — only their data is mapped.
-- One production user has `Role = "1"`; EF reads it as `Instructor`.
+- The student-verification and AI-limit columns and the `BugReports` table (created in the old SQL Server
+  database by migrations whose source was lost) are part of the model; their **features** are not rebuilt yet.
 
-### Deploying the payment migration
-`20260929082137_RefactorPaymentsAndWallet` converts existing payment data (see the summary at the top of the file):
-types and methods are derived from the old system courses, wallet balances and PRO expiry are computed from past
-transactions, and the `system-deposit-balance` / `pro-upgrade-*` courses and their enrollments are deleted.
-**Back up the database first** — the migration cannot be rolled back (`Down()` throws). It was verified on
-SQL Server LocalDB against a copy of the old schema with sample data.
+### Database: PostgreSQL
+The project runs on PostgreSQL (Npgsql). `20260930074654_InitialPostgres` creates the whole schema in one step;
+the SQL Server migrations it replaces are in the history of the `refactor/payments` branch.
+- All `DateTime` columns are `timestamp with time zone` and are always UTC (API responses end in `Z`).
+- Text search (`search=` on courses, lessons, users) is case-insensitive.
+- Moving the existing SQL Server data is a one-off job for `tools/OverLoad.DataTransfer` (below).
+
+### Hosting: Render + Neon
+`render.yaml` describes the API as a Render web service (Docker, free plan, Singapore, health check on
+`/health`, auto-deploy from the configured branch). In Render: **New → Blueprint**, pick this repo, then fill in
+the secrets it asks for (`DATABASE_URL` = Neon **pooled** connection string, CORS origin, PayOS and Gemini keys).
+`Jwt__SecretKey` is generated by Render. Free instances sleep after ~15 minutes idle; the first request after
+that takes 30–60 s. A late PayOS webhook is covered by the status sync on `/payment/orders/{code}`.
+
+### One-off data transfer: SQL Server (Azure) → PostgreSQL (Neon)
+`tools/OverLoad.DataTransfer` copies every table from the old SQL Server database into a PostgreSQL
+database that already has the `InitialPostgres` schema, converting payment data on the way
+(`LegacyTransform`: transaction type/method/PRO package from the old system courses, positive amounts,
+wallet balances, PRO expiry, UTC dates; system courses and their enrollments are dropped).
+
+1. Put both connections in `.env` (never commit it):
+   `SOURCE_SQLSERVER_CONNECTION=Server=tcp:...;Initial Catalog=...;User ID=...;Password=...;Encrypt=True;`
+   and `DATABASE_URL=postgresql://...` (Neon: use the direct host, not `-pooler`).
+2. Create the schema on the target: `dotnet ef database update --project OverLoad.Repositories --startup-project OverLoad.API`
+3. Dry run — writes everything in one transaction, checks row counts and constraints, then **rolls back**:
+   `dotnet run --project tools/OverLoad.DataTransfer`
+4. Commit: `dotnet run --project tools/OverLoad.DataTransfer -- --apply`
+
+The source is only read (`SELECT`, in a snapshot transaction on Azure SQL). The tool refuses to run when a
+target table already has rows, and stops instead of dropping a source column that has no place in the target.
+Verified end to end: an old-schema SQL Server database with sample data → PostgreSQL 16 → the API.
 
 ### Chat `/api/v1/chat`
 | Method | Route | Access | Description |
@@ -269,7 +287,7 @@ SQL Server LocalDB against a copy of the old schema with sample data.
 | Layer | Technology |
 |-------|-----------|
 | Framework | ASP.NET Core 9 |
-| ORM / DB | Entity Framework Core 9 (Code First), SQL Server |
+| ORM / DB | Entity Framework Core 9 (Code First), PostgreSQL (Npgsql) |
 | Auth | JWT Bearer + rotating refresh tokens, BCrypt, role-based authorization |
 | Validation | FluentValidation |
 | API | Asp.Versioning (URL segment), Swagger / OpenAPI |

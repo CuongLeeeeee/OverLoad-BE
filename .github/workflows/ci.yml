@@ -1,16 +1,31 @@
 name: CI - Build & Test
 
-# Runs on every pull request into main and on every push to main.
+# Runs on pull requests into main and on pushes to main and feature/refactor branches.
 on:
   pull_request:
     branches: [main]
   push:
-    branches: [main]
+    branches: [main, "feature/**", "refactor/**"]
 
 jobs:
   build-and-test:
     name: Build & Test
     runs-on: ubuntu-latest
+
+    # Integration tests run against a real PostgreSQL (see tests/.../ApiFactory.cs);
+    # service tests keep using EF Core InMemory.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: ci-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - name: Checkout code
@@ -27,8 +42,9 @@ jobs:
       - name: Build solution
         run: dotnet build OverLoad.sln --no-restore --configuration Release
 
-      # Tests use EF Core InMemory, so no database service is needed.
       - name: Run tests
+        env:
+          TEST_POSTGRES_CONNECTION: Host=localhost;Port=5432;Username=postgres;Password=ci-password
         run: dotnet test OverLoad.sln --no-build --configuration Release --logger "trx;LogFileName=test-results.trx"
 
       - name: Upload test results

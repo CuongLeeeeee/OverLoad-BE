@@ -12,7 +12,6 @@ public class LessonConfiguration : IEntityTypeConfiguration<Lesson>
         builder.HasKey(l => l.Id);
         builder.Property(l => l.Title).IsRequired().HasMaxLength(300);
         builder.Property(l => l.Description).HasMaxLength(1000);
-        builder.Property(l => l.Content).HasColumnType("nvarchar(max)");
 
         builder.HasMany(l => l.UserProgresses)
                .WithOne(p => p.Lesson)

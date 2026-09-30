@@ -24,10 +24,12 @@ public class UserRepository : BaseRepository<User>, IUserRepository
     {
         var query = _dbSet.AsQueryable();
 
-        if (!string.IsNullOrWhiteSpace(searchTerm))
+        // Case-insensitive on every provider (PostgreSQL LIKE is case-sensitive).
+        var term = searchTerm?.Trim().ToLowerInvariant();
+        if (!string.IsNullOrWhiteSpace(term))
             query = query.Where(u =>
-                u.FullName.Contains(searchTerm) ||
-                u.Email.Contains(searchTerm));
+                u.FullName.ToLower().Contains(term) ||
+                u.Email.ToLower().Contains(term));
 
         if (!string.IsNullOrWhiteSpace(role))
             query = query.Where(u => u.Role.ToString() == role);
