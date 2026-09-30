@@ -1,6 +1,6 @@
 namespace OverLoad.Services.DTOs.Response;
 
-public class CourseResponse
+public class CourseDto
 {
     public int Id { get; set; }
     public string Title { get; set; } = string.Empty;
@@ -16,13 +16,13 @@ public class CourseResponse
     public DateTime UpdatedAt { get; set; }
 }
 
-public class CourseDetailResponse : CourseResponse
+public class CourseDetailDto : CourseDto
 {
-    public List<LessonSummaryResponse> Lessons { get; set; } = new();
+    public List<LessonSummaryDto> Lessons { get; set; } = new();
     public int EnrollmentCount { get; set; }
 }
 
-public class LessonSummaryResponse
+public class LessonSummaryDto
 {
     public int Id { get; set; }
     public string Title { get; set; } = string.Empty;

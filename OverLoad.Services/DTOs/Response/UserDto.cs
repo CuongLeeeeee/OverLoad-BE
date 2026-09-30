@@ -1,6 +1,6 @@
 namespace OverLoad.Services.DTOs.Response;
 
-public class UserResponse
+public class UserDto
 {
     public int Id { get; set; }
     public string Email { get; set; } = string.Empty;
@@ -9,18 +9,19 @@ public class UserResponse
     public string? Bio { get; set; }
     public string Role { get; set; } = string.Empty;
     public bool IsVerified { get; set; }
+    public bool IsLocked { get; set; }
     public bool IsPro { get; set; }
     public DateTime? ProExpiresAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
 
-public class UserDetailResponse : UserResponse
+public class UserDetailDto : UserDto
 {
-    public List<EnrollmentSummaryResponse> Enrollments { get; set; } = new();
+    public List<EnrollmentSummaryDto> Enrollments { get; set; } = new();
 }
 
-public class EnrollmentSummaryResponse
+public class EnrollmentSummaryDto
 {
     public int CourseId { get; set; }
     public string CourseTitle { get; set; } = string.Empty;

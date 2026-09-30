@@ -1,0 +1,16 @@
+**/bin/
+**/obj/
+**/TestResults/
+.git/
+.github/
+.vs/
+.vscode/
+tests/
+*.md
+
+# Secrets must come from environment variables, never from the image.
+**/appsettings.json
+**/appsettings.*.json
+!appsettings.example.json
+**/.env
+**/.env.*

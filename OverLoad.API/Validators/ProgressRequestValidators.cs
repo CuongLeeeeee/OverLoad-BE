@@ -1,11 +1,11 @@
 using FluentValidation;
-using OverLoad.Services.DTOs.Request;
+using OverLoad.API.Models.Requests;
 
 namespace OverLoad.API.Validators;
 
-public class SaveProgressRequestValidator : AbstractValidator<SaveProgressRequest>
+public class SaveProgressRequestModelValidator : AbstractValidator<SaveProgressRequestModel>
 {
-    public SaveProgressRequestValidator()
+    public SaveProgressRequestModelValidator()
     {
         RuleFor(x => x.LastScrollPercentage).InclusiveBetween(0m, 100m);
         RuleFor(x => x.UnlockedCheckpointIndex).GreaterThanOrEqualTo(0);

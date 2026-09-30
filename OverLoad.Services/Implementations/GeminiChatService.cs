@@ -64,13 +64,13 @@ public class GeminiChatService : IChatService
         _logger = logger;
     }
 
-    public async Task<ChatResponse> SendMessageAsync(ChatRequest request)
+    public async Task<ChatReplyDto> SendMessageAsync(ChatRequest request)
     {
         // ── Bước 1: Kiểm tra prompt injection ────────────────────────────
         var injectionCheck = DetectInjection(request.Message);
         if (injectionCheck != null)
         {
-            return new ChatResponse
+            return new ChatReplyDto
             {
                 Reply = "I can only help with coding and programming questions.",
                 IsBlocked = true,
@@ -127,7 +127,7 @@ public class GeminiChatService : IChatService
         // Kiểm tra safety block từ Gemini
         if (candidate?.FinishReason == "SAFETY")
         {
-            return new ChatResponse
+            return new ChatReplyDto
             {
                 Reply = "I can only help with coding and programming questions.",
                 IsBlocked = true,
@@ -135,7 +135,7 @@ public class GeminiChatService : IChatService
             };
         }
 
-        return new ChatResponse
+        return new ChatReplyDto
         {
             Reply = candidate?.Content?.Parts?.FirstOrDefault()?.Text
                 ?? "Sorry, I could not generate a response. Please try again.",

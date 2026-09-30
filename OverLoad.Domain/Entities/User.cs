@@ -16,6 +16,18 @@ public class User : BaseEntity
     public string? RefreshToken { get; set; }
     public DateTime? RefreshTokenExpiresAt { get; set; }
 
+    /// <summary>A locked account cannot sign in or refresh its token.</summary>
+    public bool IsLocked { get; set; }
+
+    // Student verification and AI usage limits. These columns exist in production (added by
+    // migrations whose source was lost); they are mapped so the model matches the database,
+    // but the features using them still need to be rebuilt.
+    public string StudentVerificationStatus { get; set; } = "NONE";
+    public string? StudentCardPath { get; set; }
+    public bool HasSeenStudentRejection { get; set; }
+    public int AiQuestionsAskedToday { get; set; }
+    public DateTime LastAiQuestionDate { get; set; }
+
     /// <summary>Wallet balance in VND. Configured as a concurrency token so two debits cannot both succeed.</summary>
     public decimal WalletBalance { get; set; }
 

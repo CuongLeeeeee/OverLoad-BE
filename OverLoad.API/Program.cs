@@ -139,7 +139,7 @@ builder.Services.AddControllers()
 
 // ── FluentValidation ──────────────────────────────────────────────────────────
 builder.Services.AddFluentValidationAutoValidation();
-builder.Services.AddValidatorsFromAssemblyContaining<RegisterRequestValidator>();
+builder.Services.AddValidatorsFromAssemblyContaining<RegisterRequestModelValidator>();
 
 // ── API versioning: /api/v1/... ───────────────────────────────────────────────
 builder.Services.AddApiVersioning(options =>
@@ -203,15 +203,26 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
-builder.Services.AddCors(opts => opts.AddPolicy("AllowAll", p =>
-    p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
+// Browsers may only call the API from the origins listed in Cors:AllowedOrigins
+// (e.g. Cors__AllowedOrigins__0=https://overload.vn). With none configured, Development allows
+// any origin so local frontends work; any other environment allows none.
+const string CorsPolicy = "Frontend";
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
+builder.Services.AddCors(options => options.AddPolicy(CorsPolicy, policy =>
+{
+    if (allowedOrigins.Length > 0)
+        policy.WithOrigins(allowedOrigins).AllowAnyMethod().AllowAnyHeader();
+    else if (builder.Environment.IsDevelopment())
+        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+}));
 
 var app = builder.Build();
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
-if (app.Environment.IsDevelopment())
+// Swagger is on in Development; elsewhere (staging, a demo server) opt in with Swagger__Enabled=true.
+if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Swagger:Enabled"))
 {
     app.UseSwagger();
     app.UseSwaggerUI(c =>
@@ -224,8 +235,10 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseCors("AllowAll");
-app.UseHttpsRedirection();
+app.UseCors(CorsPolicy);
+// Off in the container image, where TLS is terminated by the hosting proxy (HttpsRedirection__Enabled=false).
+if (app.Configuration.GetValue("HttpsRedirection:Enabled", true))
+    app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
@@ -234,8 +247,10 @@ app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
    .AllowAnonymous();
 
-// ── Auto-migrate on startup (dev only) ────────────────────────────────────────
-if (app.Environment.IsDevelopment())
+// ── Auto-migrate on startup ───────────────────────────────────────────────────
+// On by default in Development only. Production migrations are run deliberately
+// (dotnet ef database update) after a backup — never implicitly on deploy.
+if (app.Configuration.GetValue("Database:MigrateOnStartup", app.Environment.IsDevelopment()))
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();

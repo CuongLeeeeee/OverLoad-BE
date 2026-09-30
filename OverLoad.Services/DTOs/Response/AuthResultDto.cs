@@ -6,11 +6,11 @@ using System.Threading.Tasks;
 
 namespace OverLoad.Services.DTOs.Response
 {
-    public class AuthResponse
+    public class AuthResultDto
     {
         public string AccessToken { get; set; } = string.Empty;
         public string RefreshToken { get; set; } = string.Empty;
         public DateTime AccessTokenExpiresAt { get; set; }
-        public UserResponse User { get; set; } = null!;
+        public UserDto User { get; set; } = null!;
     }
 }

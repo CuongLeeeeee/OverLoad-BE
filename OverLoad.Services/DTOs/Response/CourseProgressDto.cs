@@ -1,4 +1,6 @@
-﻿public class CourseProgressResponse
+namespace OverLoad.Services.DTOs.Response;
+
+public class CourseProgressDto
 {
     public int CourseId { get; set; }
     public string CourseTitle { get; set; } = string.Empty;

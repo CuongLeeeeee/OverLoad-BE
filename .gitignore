@@ -42,6 +42,7 @@ tmp/
 # ======================
 *.env
 .env.*
+!.env.example
 secrets.json
 appsettings.json
 appsettings.Development.json

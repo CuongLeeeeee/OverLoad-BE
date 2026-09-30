@@ -2,8 +2,9 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OverLoad.API.Common;
-using OverLoad.Services.DTOs.Request;
-using OverLoad.Services.DTOs.Response;
+using OverLoad.API.Models.Mappings;
+using OverLoad.API.Models.Requests;
+using OverLoad.API.Models.Responses;
 using OverLoad.Services.Interfaces;
 
 namespace OverLoad.API.Controllers;
@@ -42,6 +43,9 @@ public class ChatController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
-    public async Task<ActionResult<ApiResponse<ChatResponse>>> Chat([FromBody] ChatRequest request)
-        => Ok(ApiResponse<ChatResponse>.Ok(await _chatService.SendMessageAsync(request)));
+    public async Task<ActionResult<ApiResponse<ChatResponseModel>>> Chat([FromBody] ChatRequestModel request)
+    {
+        var reply = await _chatService.SendMessageAsync(request.ToServiceDto());
+        return Ok(ApiResponse<ChatResponseModel>.Ok(reply.ToResponseModel()));
+    }
 }

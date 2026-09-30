@@ -1,11 +1,11 @@
 using FluentValidation;
-using OverLoad.Services.DTOs.Request;
+using OverLoad.API.Models.Requests;
 
 namespace OverLoad.API.Validators;
 
-public class CreateEnrollmentRequestValidator : AbstractValidator<CreateEnrollmentRequest>
+public class GrantEnrollmentRequestModelValidator : AbstractValidator<GrantEnrollmentRequestModel>
 {
-    public CreateEnrollmentRequestValidator()
+    public GrantEnrollmentRequestModelValidator()
     {
         RuleFor(x => x.UserId).GreaterThan(0);
         RuleFor(x => x.CourseId).GreaterThan(0);

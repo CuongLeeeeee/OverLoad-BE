@@ -3,9 +3,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OverLoad.API.Common;
 using OverLoad.API.Extensions;
-using OverLoad.Services.Common;
-using OverLoad.Services.DTOs.Request;
-using OverLoad.Services.DTOs.Response;
+using OverLoad.API.Models.Mappings;
+using OverLoad.API.Models.Requests;
+using OverLoad.API.Models.Responses;
 using OverLoad.Services.Interfaces;
 
 namespace OverLoad.API.Controllers;
@@ -40,33 +40,45 @@ public class MeController : ControllerBase
 
     /// <summary>Profile of the signed-in user, including enrollment history.</summary>
     [HttpGet]
-    public async Task<ActionResult<ApiResponse<UserDetailResponse>>> GetProfile()
-        => Ok(ApiResponse<UserDetailResponse>.Ok(await _userService.GetByIdAsync(User.GetUserId())));
+    public async Task<ActionResult<ApiResponse<UserDetailResponseModel>>> GetProfile()
+    {
+        var user = await _userService.GetByIdAsync(User.GetUserId());
+        return Ok(ApiResponse<UserDetailResponseModel>.Ok(user.ToResponseModel()));
+    }
 
     /// <summary>Update name, avatar and bio of the signed-in user.</summary>
     [HttpPut]
-    public async Task<ActionResult<ApiResponse<UserResponse>>> UpdateProfile([FromBody] UpdateProfileRequest request)
-        => Ok(ApiResponse<UserResponse>.Ok(
-            await _userService.UpdateProfileAsync(User.GetUserId(), request), "Profile updated successfully."));
+    public async Task<ActionResult<ApiResponse<UserResponseModel>>> UpdateProfile([FromBody] UpdateProfileRequestModel request)
+    {
+        var user = await _userService.UpdateProfileAsync(User.GetUserId(), request.ToServiceDto());
+        return Ok(ApiResponse<UserResponseModel>.Ok(user.ToResponseModel(), "Profile updated successfully."));
+    }
 
     /// <summary>Courses the signed-in user is enrolled in, with progress.</summary>
     [HttpGet("courses")]
-    public async Task<ActionResult<ApiResponse<List<MyCourseResponse>>>> GetMyCourses()
-        => Ok(ApiResponse<List<MyCourseResponse>>.Ok(await _enrollmentService.GetMyCoursesAsync(User.GetUserId())));
+    public async Task<ActionResult<ApiResponse<List<MyCourseResponseModel>>>> GetMyCourses()
+    {
+        var courses = await _enrollmentService.GetMyCoursesAsync(User.GetUserId());
+        return Ok(ApiResponse<List<MyCourseResponseModel>>.Ok(courses.Select(c => c.ToResponseModel()).ToList()));
+    }
 
     /// <summary>Progress summary of the signed-in user in one course.</summary>
     [HttpGet("courses/{courseId:int}/progress")]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ApiResponse<CourseProgressResponse>>> GetCourseProgress(int courseId)
-        => Ok(ApiResponse<CourseProgressResponse>.Ok(
-            await _enrollmentService.GetCourseProgressAsync(User.GetUserId(), courseId)));
+    public async Task<ActionResult<ApiResponse<CourseProgressResponseModel>>> GetCourseProgress(int courseId)
+    {
+        var progress = await _enrollmentService.GetCourseProgressAsync(User.GetUserId(), courseId);
+        return Ok(ApiResponse<CourseProgressResponseModel>.Ok(progress.ToResponseModel()));
+    }
 
     /// <summary>Progress of the signed-in user on one lesson.</summary>
     [HttpGet("lessons/{lessonId:int}/progress")]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ApiResponse<ProgressResponse>>> GetLessonProgress(int lessonId)
-        => Ok(ApiResponse<ProgressResponse>.Ok(
-            await _progressService.GetMyLessonProgressAsync(User.GetUserId(), lessonId)));
+    public async Task<ActionResult<ApiResponse<ProgressResponseModel>>> GetLessonProgress(int lessonId)
+    {
+        var progress = await _progressService.GetMyLessonProgressAsync(User.GetUserId(), lessonId);
+        return Ok(ApiResponse<ProgressResponseModel>.Ok(progress.ToResponseModel()));
+    }
 
     /// <summary>
     /// Save the signed-in user's progress on a lesson (video position, scroll, checkpoints).
@@ -75,27 +87,36 @@ public class MeController : ControllerBase
     [HttpPut("lessons/{lessonId:int}/progress")]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ApiResponse<ProgressResponse>>> SaveLessonProgress(
-        int lessonId, [FromBody] SaveProgressRequest request)
-        => Ok(ApiResponse<ProgressResponse>.Ok(
-            await _progressService.SaveMyLessonProgressAsync(User.GetUserId(), lessonId, request), "Progress saved."));
+    public async Task<ActionResult<ApiResponse<ProgressResponseModel>>> SaveLessonProgress(
+        int lessonId, [FromBody] SaveProgressRequestModel request)
+    {
+        var progress = await _progressService.SaveMyLessonProgressAsync(User.GetUserId(), lessonId, request.ToServiceDto());
+        return Ok(ApiResponse<ProgressResponseModel>.Ok(progress.ToResponseModel(), "Progress saved."));
+    }
 
     /// <summary>Wallet balance and PRO status. Pending deposits are refreshed from PayOS first.</summary>
     [HttpGet("wallet")]
-    public async Task<ActionResult<ApiResponse<WalletResponse>>> GetWallet()
-        => Ok(ApiResponse<WalletResponse>.Ok(await _walletService.GetWalletAsync(User.GetUserId())));
+    public async Task<ActionResult<ApiResponse<WalletResponseModel>>> GetWallet()
+    {
+        var wallet = await _walletService.GetWalletAsync(User.GetUserId());
+        return Ok(ApiResponse<WalletResponseModel>.Ok(wallet.ToResponseModel()));
+    }
 
     /// <summary>Buy a PRO package with the wallet balance. Top up through POST /payment/checkout (type Deposit).</summary>
     [HttpPost("wallet/purchase-pro")]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<ApiResponse<WalletResponse>>> PurchasePro([FromBody] PurchaseProRequest request)
-        => Ok(ApiResponse<WalletResponse>.Ok(
-            await _walletService.PurchaseProAsync(User.GetUserId(), request.Package), "PRO upgrade successful."));
+    public async Task<ActionResult<ApiResponse<WalletResponseModel>>> PurchasePro([FromBody] PurchaseProRequestModel request)
+    {
+        var wallet = await _walletService.PurchaseProAsync(User.GetUserId(), request.Package);
+        return Ok(ApiResponse<WalletResponseModel>.Ok(wallet.ToResponseModel(), "PRO upgrade successful."));
+    }
 
     /// <summary>Your payment history (course purchases, PRO upgrades, deposits), newest first.</summary>
     [HttpGet("transactions")]
-    public async Task<ActionResult<ApiResponse<PagedResult<TransactionResponse>>>> GetTransactions(
-        [FromQuery] TransactionQueryParams query)
-        => Ok(ApiResponse<PagedResult<TransactionResponse>>.Ok(
-            await _paymentService.GetMyTransactionsAsync(User.GetUserId(), query)));
+    public async Task<ActionResult<ApiResponse<PagedResponseModel<TransactionResponseModel>>>> GetTransactions(
+        [FromQuery] TransactionQueryRequestModel query)
+    {
+        var page = await _paymentService.GetMyTransactionsAsync(User.GetUserId(), query.ToServiceDto());
+        return Ok(ApiResponse<PagedResponseModel<TransactionResponseModel>>.Ok(page.ToResponseModel(t => t.ToResponseModel())));
+    }
 }

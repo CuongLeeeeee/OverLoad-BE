@@ -19,6 +19,14 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.Role).HasConversion<string>();
         builder.Property(u => u.RefreshToken).HasMaxLength(500);
 
+        // Columns that already exist in production, with the same types and defaults.
+        builder.Property(u => u.IsLocked).HasDefaultValue(false);
+        builder.Property(u => u.StudentVerificationStatus).IsRequired().HasMaxLength(50).HasDefaultValue("NONE");
+        builder.Property(u => u.StudentCardPath).HasMaxLength(500);
+        builder.Property(u => u.HasSeenStudentRejection).HasDefaultValue(false);
+        builder.Property(u => u.AiQuestionsAskedToday).HasDefaultValue(0);
+        builder.Property(u => u.LastAiQuestionDate).HasDefaultValue(DateTime.MinValue);
+
         // Concurrency token: a wallet debit is written as "UPDATE ... WHERE WalletBalance = <value read>",
         // so two simultaneous purchases cannot both spend the same money.
         builder.Property(u => u.WalletBalance).HasPrecision(18, 2).HasDefaultValue(0m).IsConcurrencyToken();

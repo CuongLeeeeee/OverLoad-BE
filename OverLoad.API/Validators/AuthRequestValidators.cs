@@ -1,11 +1,11 @@
 using FluentValidation;
-using OverLoad.Services.DTOs.Request;
+using OverLoad.API.Models.Requests;
 
 namespace OverLoad.API.Validators;
 
-public class RegisterRequestValidator : AbstractValidator<RegisterRequest>
+public class RegisterRequestModelValidator : AbstractValidator<RegisterRequestModel>
 {
-    public RegisterRequestValidator()
+    public RegisterRequestModelValidator()
     {
         RuleFor(x => x.Email).NotEmpty().EmailAddress().MaximumLength(256);
         RuleFor(x => x.Password).NotEmpty().MinimumLength(6).MaximumLength(100);
@@ -15,18 +15,18 @@ public class RegisterRequestValidator : AbstractValidator<RegisterRequest>
     }
 }
 
-public class LoginRequestValidator : AbstractValidator<LoginRequest>
+public class LoginRequestModelValidator : AbstractValidator<LoginRequestModel>
 {
-    public LoginRequestValidator()
+    public LoginRequestModelValidator()
     {
         RuleFor(x => x.Email).NotEmpty().EmailAddress();
         RuleFor(x => x.Password).NotEmpty();
     }
 }
 
-public class RefreshTokenRequestValidator : AbstractValidator<RefreshTokenRequest>
+public class RefreshTokenRequestModelValidator : AbstractValidator<RefreshTokenRequestModel>
 {
-    public RefreshTokenRequestValidator()
+    public RefreshTokenRequestModelValidator()
     {
         RuleFor(x => x.RefreshToken).NotEmpty();
     }

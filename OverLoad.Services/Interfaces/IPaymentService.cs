@@ -7,7 +7,7 @@ namespace OverLoad.Services.Interfaces;
 public interface IPaymentService
 {
     /// <summary>Creates a pending transaction and a PayOS checkout link for it.</summary>
-    Task<CheckoutResponse> CheckoutAsync(int userId, CheckoutRequest request);
+    Task<CheckoutDto> CheckoutAsync(int userId, CheckoutRequest request);
 
     /// <summary>
     /// Applies a payment the gateway reported as paid (the caller has already verified the webhook
@@ -17,7 +17,7 @@ public interface IPaymentService
     Task<bool> ConfirmPaidAsync(long orderCode, long amountPaid);
 
     /// <summary>One of the caller's orders, refreshed from the gateway while still pending.</summary>
-    Task<TransactionResponse> GetMyOrderAsync(int userId, long orderCode);
+    Task<TransactionDto> GetMyOrderAsync(int userId, long orderCode);
 
     /// <summary>
     /// Asks the gateway about the user's pending orders and applies the result. A fallback for
@@ -25,7 +25,7 @@ public interface IPaymentService
     /// </summary>
     Task SyncPendingAsync(int userId);
 
-    Task<PagedResult<TransactionResponse>> GetMyTransactionsAsync(int userId, TransactionQueryParams query);
-    Task<PagedResult<TransactionResponse>> GetAllTransactionsAsync(TransactionQueryParams query);
-    Task<RevenueStatsResponse> GetRevenueStatsAsync();
+    Task<PagedResult<TransactionDto>> GetMyTransactionsAsync(int userId, TransactionQueryParams query);
+    Task<PagedResult<TransactionDto>> GetAllTransactionsAsync(TransactionQueryParams query);
+    Task<RevenueStatsDto> GetRevenueStatsAsync();
 }

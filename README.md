@@ -10,26 +10,43 @@ ASP.NET Core 9 Web API with a layered architecture: API → Services → Reposit
 OverLoad/
 ├── OverLoad.Domain/            # Pure C# entities & enums (no dependencies)
 ├── OverLoad.Repositories/      # EF Core: AppDbContext, configurations, repositories, migrations
-├── OverLoad.Services/          # Business logic
+├── OverLoad.Services/          # Business logic — knows nothing about HTTP
 │   ├── Common/                 # PagedResult<T>, QueryParameters (paging + "-field" sorting)
-│   ├── DTOs/                   # Request / Response DTOs
+│   ├── DTOs/                   # Service input (Request/*Request) and output (Response/*Dto)
 │   ├── Exceptions/             # NotFound, Conflict, BusinessRule, Unauthorized, Forbidden, ExternalService
-│   ├── Settings/               # JwtSettings, GeminiSettings (Options pattern)
-│   └── Implementations/        # Services return DTOs and throw exceptions — no HTTP concerns
+│   ├── Settings/               # JwtSettings, GeminiSettings, PaymentSettings (Options pattern)
+│   └── Implementations/        # Services return DTOs and throw exceptions
 ├── OverLoad.API/
 │   ├── Common/                 # ApiResponse<T> envelope, Roles, PayOSSettings
 │   ├── Controllers/            # Thin controllers, versioned under /api/v1
+│   ├── Models/                 # The public JSON contract, separate from service DTOs
+│   │   ├── Requests/           #   *RequestModel (validated by FluentValidation)
+│   │   ├── Responses/          #   *ResponseModel, PagedResponseModel<T>
+│   │   └── Mappings/           #   ToServiceDto() / ToResponseModel() extension methods
+│   ├── Infrastructure/         # PayOSGateway (PayOS SDK behind IPaymentGateway)
 │   ├── Extensions/             # ClaimsPrincipal.GetUserId() / IsStaff()
 │   ├── Middleware/             # GlobalExceptionMiddleware: exception → HTTP status + envelope
-│   └── Validators/             # FluentValidation rules
+│   └── Validators/             # FluentValidation rules for the request models
 └── tests/OverLoad.Tests/       # xUnit: service tests (EF InMemory) + HTTP integration tests
 ```
+
+Request flow: `RequestModel` → validator → controller → `ToServiceDto()` → service → `*Dto` → `ToResponseModel()` → `ApiResponse<T>`.
 
 ---
 
 ## 🚀 Getting Started
 
-### Prerequisites
+### Option A — Docker (API + SQL Server, nothing else to install)
+```bash
+cp .env.example .env        # fill in JWT_SECRET_KEY (and PayOS / Gemini keys if needed)
+docker compose up --build
+```
+API at http://localhost:8080 (Swagger at the root), SQL Server at `localhost,1433`. The database is
+created and migrated on startup; data lives in the `overload-db-data` volume.
+
+### Option B — .NET SDK
+
+#### Prerequisites
 - [.NET 9 SDK](https://dotnet.microsoft.com/download)
 - SQL Server (LocalDB, Express, or full)
 
@@ -55,6 +72,20 @@ Swagger UI is served at the root in Development. `GET /health` returns `{ "statu
 dotnet test
 ```
 No database is needed — tests use EF Core InMemory. CI runs the same command on every PR (`.github/workflows/ci.yml`).
+
+### Deployment settings
+
+| Setting (env var form) | Default | Purpose |
+|---|---|---|
+| `ConnectionStrings__DefaultConnection` | — | SQL Server connection string |
+| `Jwt__SecretKey` | — (required) | Token signing key, 32+ characters |
+| `Cors__AllowedOrigins__0`, `__1`, ... | none | Origins allowed to call the API from a browser. Development allows any origin when none are set; other environments allow **none** |
+| `Payment__FrontendBaseUrl` | `http://localhost:3000` | Where PayOS sends buyers back to; return/cancel URLs must be on this origin |
+| `Swagger__Enabled` | `false` | Serve Swagger outside Development |
+| `Database__MigrateOnStartup` | `true` in Development, else `false` | Apply EF migrations when the app starts. Keep it off in production: back up, then run `dotnet ef database update` yourself |
+
+The `Dockerfile` builds a slim ASP.NET runtime image listening on port **8080** as a non-root user.
+Pass the settings above as environment variables; the image contains no `appsettings.json` or secrets.
 
 ---
 
@@ -175,6 +206,19 @@ Enums are sent and received as names: `"level": "Beginner"`, `"role": "Instructo
 - `Users.WalletBalance` is a concurrency token too: two simultaneous PRO purchases cannot overdraw the wallet.
 - **PRO** (`Users.ProExpiresAt`) gives access to every paid course until it expires. Buying again while active extends from the current expiry. PRO users can also `POST /courses/{id}/enroll` on paid courses to track progress there.
 - Prices, deposit limits and the frontend URL come from the `Payment` settings. Client-supplied `returnUrl` / `cancelUrl` must be on `FrontendBaseUrl`.
+
+### Production schema reconciliation
+Production had five migrations applied from code that was later lost (`AddManagerRoleAndIsLocked`,
+`AddStudentVerificationFields`, `AddAiLimitsToUser`, `AddBugReports`, `AddBugReportAttachmentUrl`).
+`20260930060145_ReconcileProductionSchema` re-declares what they created — `Users.IsLocked`, the student
+verification and AI-limit columns, and the `BugReports` table — with the exact production definitions.
+Every statement is guarded (`IF COL_LENGTH ... IS NULL`), so it does nothing on production and creates the
+objects on a fresh database. Verified on LocalDB for both cases.
+
+- `IsLocked` is enforced again: locked accounts get **403** on login and refresh. Admins use
+  `POST /api/v1/users/{id}/lock` and `/unlock` (locking also revokes the refresh token).
+- The student-verification, AI-limit and bug-report **features** are not rebuilt yet — only their data is mapped.
+- One production user has `Role = "1"`; EF reads it as `Instructor`.
 
 ### Deploying the payment migration
 `20260929082137_RefactorPaymentsAndWallet` converts existing payment data (see the summary at the top of the file):

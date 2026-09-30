@@ -18,7 +18,7 @@ public class CourseService : ICourseService
         _courseRepository = courseRepository;
     }
 
-    public async Task<PagedResult<CourseResponse>> GetAllAsync(CourseQueryParams query, bool includeUnpublished)
+    public async Task<PagedResult<CourseDto>> GetAllAsync(CourseQueryParams query, bool includeUnpublished)
     {
         var isPublished = includeUnpublished ? query.IsPublished : true;
         var (sortBy, sortDesc) = query.ParseSort();
@@ -27,22 +27,22 @@ public class CourseService : ICourseService
             query.Search, query.Category, query.Level?.ToString(), isPublished,
             query.PageNumber, query.PageSize, sortBy, sortDesc);
 
-        return PagedResult<CourseResponse>.Create(items.Select(MapToResponse), total, query);
+        return PagedResult<CourseDto>.Create(items.Select(MapToResponse), total, query);
     }
 
-    public async Task<CourseDetailResponse> GetByIdAsync(int id, bool includeUnpublished)
+    public async Task<CourseDetailDto> GetByIdAsync(int id, bool includeUnpublished)
     {
         var course = await _courseRepository.GetWithLessonsAsync(id);
         return MapVisibleDetail(course, includeUnpublished, id);
     }
 
-    public async Task<CourseDetailResponse> GetBySlugAsync(string slug, bool includeUnpublished)
+    public async Task<CourseDetailDto> GetBySlugAsync(string slug, bool includeUnpublished)
     {
         var course = await _courseRepository.GetBySlugAsync(slug);
         return MapVisibleDetail(course, includeUnpublished, slug);
     }
 
-    public async Task<CourseResponse> CreateAsync(CreateCourseRequest request)
+    public async Task<CourseDto> CreateAsync(CreateCourseRequest request)
     {
         var slug = GenerateSlug(request.Title);
         if (await _courseRepository.SlugExistsAsync(slug))
@@ -63,7 +63,7 @@ public class CourseService : ICourseService
         return MapToResponse(created);
     }
 
-    public async Task<CourseResponse> UpdateAsync(int id, UpdateCourseRequest request)
+    public async Task<CourseDto> UpdateAsync(int id, UpdateCourseRequest request)
     {
         var course = await _courseRepository.GetByIdAsync(id)
             ?? throw new NotFoundException("Course", id);
@@ -99,7 +99,7 @@ public class CourseService : ICourseService
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     // Draft courses are reported as missing to non-staff callers, so their existence is not leaked.
-    private static CourseDetailResponse MapVisibleDetail(Course? course, bool includeUnpublished, object key)
+    private static CourseDetailDto MapVisibleDetail(Course? course, bool includeUnpublished, object key)
     {
         if (course == null || (!course.IsPublished && !includeUnpublished))
             throw new NotFoundException("Course", key);
@@ -112,7 +112,7 @@ public class CourseService : ICourseService
             .Replace(' ', '-')
             .Trim('-');
 
-    private static CourseResponse MapToResponse(Course c) => new()
+    private static CourseDto MapToResponse(Course c) => new()
     {
         Id = c.Id,
         Title = c.Title,
@@ -128,7 +128,7 @@ public class CourseService : ICourseService
         UpdatedAt = c.UpdatedAt
     };
 
-    private static CourseDetailResponse MapToDetailResponse(Course c) => new()
+    private static CourseDetailDto MapToDetailResponse(Course c) => new()
     {
         Id = c.Id,
         Title = c.Title,
@@ -143,7 +143,7 @@ public class CourseService : ICourseService
         CreatedAt = c.CreatedAt,
         UpdatedAt = c.UpdatedAt,
         EnrollmentCount = c.Enrollments?.Count ?? 0,
-        Lessons = c.Lessons.Select(l => new LessonSummaryResponse
+        Lessons = c.Lessons.Select(l => new LessonSummaryDto
         {
             Id = l.Id,
             Title = l.Title,

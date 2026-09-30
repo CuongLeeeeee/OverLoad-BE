@@ -1,0 +1,5 @@
+# Files read inside Linux containers or by docker compose keep LF endings on every OS.
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+*.yml text eol=lf
+.env* text eol=lf

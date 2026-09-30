@@ -1,11 +1,12 @@
 using FluentValidation;
+using OverLoad.API.Models.Requests;
 using OverLoad.Services.DTOs.Request;
 
 namespace OverLoad.API.Validators;
 
-public class CheckoutRequestValidator : AbstractValidator<CheckoutRequest>
+public class CheckoutRequestModelValidator : AbstractValidator<CheckoutRequestModel>
 {
-    public CheckoutRequestValidator()
+    public CheckoutRequestModelValidator()
     {
         RuleFor(x => x.Type).IsInEnum();
 
@@ -30,9 +31,9 @@ public class CheckoutRequestValidator : AbstractValidator<CheckoutRequest>
     }
 }
 
-public class PurchaseProRequestValidator : AbstractValidator<PurchaseProRequest>
+public class PurchaseProRequestModelValidator : AbstractValidator<PurchaseProRequestModel>
 {
-    public PurchaseProRequestValidator()
+    public PurchaseProRequestModelValidator()
     {
         RuleFor(x => x.Package).IsInEnum();
     }

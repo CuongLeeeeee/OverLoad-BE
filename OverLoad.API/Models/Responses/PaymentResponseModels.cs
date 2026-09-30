@@ -1,13 +1,15 @@
-namespace OverLoad.Services.DTOs.Response;
+namespace OverLoad.API.Models.Responses;
 
-public class CheckoutResponse
+public class CheckoutResponseModel
 {
     public long OrderCode { get; set; }
     public decimal Amount { get; set; }
+
+    /// <summary>Redirect the user here to pay.</summary>
     public string CheckoutUrl { get; set; } = string.Empty;
 }
 
-public class TransactionResponse
+public class TransactionResponseModel
 {
     public string TransactionId { get; set; } = string.Empty;
     public long OrderCode { get; set; }
@@ -25,29 +27,22 @@ public class TransactionResponse
     public DateTime? PaidAt { get; set; }
 }
 
-public class WalletResponse
+public class WalletResponseModel
 {
     public decimal Balance { get; set; }
     public bool IsPro { get; set; }
     public DateTime? ProExpiresAt { get; set; }
 }
 
-public class RevenueStatsResponse
+public class RevenueStatsResponseModel
 {
     /// <summary>Money actually received through PayOS (wallet spending is not new revenue).</summary>
     public decimal TotalRevenue { get; set; }
     public decimal CourseRevenue { get; set; }
     public decimal ProRevenue { get; set; }
     public decimal DepositRevenue { get; set; }
-
-    /// <summary>Courses bought through PayOS.</summary>
     public int CoursesSold { get; set; }
-
-    /// <summary>PRO packages bought, through PayOS or the wallet.</summary>
     public int ProUpgradesSold { get; set; }
-
-    /// <summary>Sum of all wallet balances still unspent.</summary>
     public decimal OutstandingWalletBalance { get; set; }
-
-    public List<TransactionResponse> RecentTransactions { get; set; } = new();
+    public List<TransactionResponseModel> RecentTransactions { get; set; } = new();
 }

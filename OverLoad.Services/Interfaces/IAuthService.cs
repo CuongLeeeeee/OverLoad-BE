@@ -5,8 +5,8 @@ namespace OverLoad.Services.Interfaces;
 
 public interface IAuthService
 {
-    Task<AuthResponse> RegisterAsync(RegisterRequest request);
-    Task<AuthResponse> LoginAsync(LoginRequest request);
-    Task<AuthResponse> RefreshTokenAsync(RefreshTokenRequest request);
+    Task<AuthResultDto> RegisterAsync(RegisterRequest request);
+    Task<AuthResultDto> LoginAsync(LoginRequest request);
+    Task<AuthResultDto> RefreshTokenAsync(RefreshTokenRequest request);
     Task LogoutAsync(int userId);
 }

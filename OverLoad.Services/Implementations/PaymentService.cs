@@ -50,7 +50,7 @@ public class PaymentService : IPaymentService
 
     // ── Checkout ─────────────────────────────────────────────────────────────
 
-    public async Task<CheckoutResponse> CheckoutAsync(int userId, CheckoutRequest request)
+    public async Task<CheckoutDto> CheckoutAsync(int userId, CheckoutRequest request)
     {
         var transaction = new Transaction
         {
@@ -110,7 +110,7 @@ public class PaymentService : IPaymentService
         _transactionRepository.Add(transaction);
         await _unitOfWork.SaveChangesAsync();
 
-        return new CheckoutResponse
+        return new CheckoutDto
         {
             OrderCode = transaction.OrderCode,
             Amount = transaction.Amount,
@@ -233,7 +233,7 @@ public class PaymentService : IPaymentService
 
     // ── Queries ──────────────────────────────────────────────────────────────
 
-    public async Task<TransactionResponse> GetMyOrderAsync(int userId, long orderCode)
+    public async Task<TransactionDto> GetMyOrderAsync(int userId, long orderCode)
     {
         var transaction = await _transactionRepository.GetByOrderCodeAsync(orderCode);
         if (transaction == null || transaction.UserId != userId)
@@ -249,16 +249,16 @@ public class PaymentService : IPaymentService
         return MapToResponse(transaction);
     }
 
-    public async Task<PagedResult<TransactionResponse>> GetMyTransactionsAsync(int userId, TransactionQueryParams query)
+    public async Task<PagedResult<TransactionDto>> GetMyTransactionsAsync(int userId, TransactionQueryParams query)
     {
         await SyncPendingAsync(userId);
         return await SearchAsync(userId, query);
     }
 
-    public Task<PagedResult<TransactionResponse>> GetAllTransactionsAsync(TransactionQueryParams query)
+    public Task<PagedResult<TransactionDto>> GetAllTransactionsAsync(TransactionQueryParams query)
         => SearchAsync(query.UserId, query);
 
-    public async Task<RevenueStatsResponse> GetRevenueStatsAsync()
+    public async Task<RevenueStatsDto> GetRevenueStatsAsync()
     {
         var totals = await _transactionRepository.GetSuccessTotalsAsync();
         var (recent, _) = await _transactionRepository.SearchAsync(
@@ -267,7 +267,7 @@ public class PaymentService : IPaymentService
         decimal Sum(Func<TransactionTotal, bool> predicate) => totals.Where(predicate).Sum(t => t.Amount);
         int Count(Func<TransactionTotal, bool> predicate) => totals.Where(predicate).Sum(t => t.Count);
 
-        return new RevenueStatsResponse
+        return new RevenueStatsDto
         {
             TotalRevenue = Sum(t => t.Method == PaymentMethod.PayOS),
             CourseRevenue = Sum(t => t.Method == PaymentMethod.PayOS && t.Type == TransactionType.CoursePurchase),
@@ -306,13 +306,13 @@ public class PaymentService : IPaymentService
     private async Task<User> GetUserAsync(int userId)
         => await _userRepository.GetByIdAsync(userId) ?? throw new NotFoundException("User", userId);
 
-    private async Task<PagedResult<TransactionResponse>> SearchAsync(int? userId, TransactionQueryParams query)
+    private async Task<PagedResult<TransactionDto>> SearchAsync(int? userId, TransactionQueryParams query)
     {
         var (sortBy, sortDesc) = query.ParseSort();
         var (items, total) = await _transactionRepository.SearchAsync(
             userId, query.Type, query.Status, query.PageNumber, query.PageSize, sortBy, sortDesc);
 
-        return PagedResult<TransactionResponse>.Create(items.Select(MapToResponse), total, query);
+        return PagedResult<TransactionDto>.Create(items.Select(MapToResponse), total, query);
     }
 
     /// <summary>
@@ -335,7 +335,7 @@ public class PaymentService : IPaymentService
     private static string Truncate(string value, int maxLength)
         => value.Length <= maxLength ? value : value[..maxLength];
 
-    internal static TransactionResponse MapToResponse(Transaction t) => new()
+    internal static TransactionDto MapToResponse(Transaction t) => new()
     {
         TransactionId = t.TransactionId,
         OrderCode = t.OrderCode,

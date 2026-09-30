@@ -30,16 +30,16 @@ public class EnrollmentService : IEnrollmentService
         _courseAccess = courseAccess;
     }
 
-    public async Task<PagedResult<EnrollmentResponse>> GetAllAsync(EnrollmentQueryParams query)
+    public async Task<PagedResult<EnrollmentDto>> GetAllAsync(EnrollmentQueryParams query)
     {
         var (sortBy, sortDesc) = query.ParseSort();
         var (items, total) = await _enrollmentRepository.SearchAsync(
             query.UserId, query.CourseId, query.PageNumber, query.PageSize, sortBy, sortDesc);
 
-        return PagedResult<EnrollmentResponse>.Create(items.Select(MapToResponse), total, query);
+        return PagedResult<EnrollmentDto>.Create(items.Select(MapToResponse), total, query);
     }
 
-    public async Task<EnrollmentResponse> GetByIdAsync(int id)
+    public async Task<EnrollmentDto> GetByIdAsync(int id)
     {
         var enrollment = await _enrollmentRepository.GetByIdAsync(id)
             ?? throw new NotFoundException("Enrollment", id);
@@ -51,7 +51,7 @@ public class EnrollmentService : IEnrollmentService
         return MapToResponse(enrollment);
     }
 
-    public async Task<EnrollmentResponse> SelfEnrollAsync(int userId, int courseId)
+    public async Task<EnrollmentDto> SelfEnrollAsync(int userId, int courseId)
     {
         var course = await _courseRepository.GetByIdAsync(courseId);
         if (course == null || !course.IsPublished)
@@ -63,7 +63,7 @@ public class EnrollmentService : IEnrollmentService
         return await CreateEnrollmentAsync(userId, course);
     }
 
-    public async Task<EnrollmentResponse> GrantAsync(CreateEnrollmentRequest request)
+    public async Task<EnrollmentDto> GrantAsync(CreateEnrollmentRequest request)
     {
         var course = await _courseRepository.GetByIdAsync(request.CourseId)
             ?? throw new NotFoundException("Course", request.CourseId);
@@ -79,7 +79,7 @@ public class EnrollmentService : IEnrollmentService
         await _enrollmentRepository.DeleteAsync(id);
     }
 
-    public async Task<List<MyCourseResponse>> GetMyCoursesAsync(int userId)
+    public async Task<List<MyCourseDto>> GetMyCoursesAsync(int userId)
     {
         var enrollments = await _enrollmentRepository.GetByUserIdWithDetailsAsync(userId);
 
@@ -90,7 +90,7 @@ public class EnrollmentService : IEnrollmentService
                 ? (int)Math.Round(totalLessons * (double)e.ProgressPercentage / 100)
                 : 0;
 
-            return new MyCourseResponse
+            return new MyCourseDto
             {
                 CourseId = e.CourseId,
                 Title = e.Course?.Title ?? string.Empty,
@@ -109,7 +109,7 @@ public class EnrollmentService : IEnrollmentService
         }).ToList();
     }
 
-    public async Task<CourseProgressResponse> GetCourseProgressAsync(int userId, int courseId)
+    public async Task<CourseProgressDto> GetCourseProgressAsync(int userId, int courseId)
     {
         var enrollment = await _enrollmentRepository.GetByUserAndCourseAsync(userId, courseId)
             ?? throw new NotFoundException("You are not enrolled in this course.");
@@ -121,7 +121,7 @@ public class EnrollmentService : IEnrollmentService
         var completedLessons = (await _progressRepository.GetByUserIdAsync(userId))
             .Count(p => lessonIds.Contains(p.LessonId) && p.Completed);
 
-        return new CourseProgressResponse
+        return new CourseProgressDto
         {
             CourseId = courseId,
             CourseTitle = course.Title,
@@ -135,7 +135,7 @@ public class EnrollmentService : IEnrollmentService
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private async Task<EnrollmentResponse> CreateEnrollmentAsync(int userId, Course course)
+    private async Task<EnrollmentDto> CreateEnrollmentAsync(int userId, Course course)
     {
         var user = await _userRepository.GetByIdAsync(userId)
             ?? throw new NotFoundException("User", userId);
@@ -155,7 +155,7 @@ public class EnrollmentService : IEnrollmentService
         return MapToResponse(created);
     }
 
-    private static EnrollmentResponse MapToResponse(Enrollment e) => new()
+    private static EnrollmentDto MapToResponse(Enrollment e) => new()
     {
         Id = e.Id,
         UserId = e.UserId,

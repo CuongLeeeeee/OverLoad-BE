@@ -27,17 +27,17 @@ public class ProgressService : IProgressService
         _courseAccess = courseAccess;
     }
 
-    public async Task<PagedResult<ProgressResponse>> GetAllAsync(ProgressQueryParams query)
+    public async Task<PagedResult<ProgressDto>> GetAllAsync(ProgressQueryParams query)
     {
         var (sortBy, sortDesc) = query.ParseSort();
         var (items, total) = await _progressRepository.SearchAsync(
             query.UserId, query.LessonId, query.Completed,
             query.PageNumber, query.PageSize, sortBy, sortDesc);
 
-        return PagedResult<ProgressResponse>.Create(items.Select(MapToResponse), total, query);
+        return PagedResult<ProgressDto>.Create(items.Select(MapToResponse), total, query);
     }
 
-    public async Task<ProgressResponse> GetMyLessonProgressAsync(int userId, int lessonId)
+    public async Task<ProgressDto> GetMyLessonProgressAsync(int userId, int lessonId)
     {
         var progress = await _progressRepository.GetByUserAndLessonAsync(userId, lessonId)
             ?? throw new NotFoundException("No progress recorded for this lesson yet.");
@@ -45,7 +45,7 @@ public class ProgressService : IProgressService
         return MapToResponse(progress);
     }
 
-    public async Task<ProgressResponse> SaveMyLessonProgressAsync(int userId, int lessonId, SaveProgressRequest request)
+    public async Task<ProgressDto> SaveMyLessonProgressAsync(int userId, int lessonId, SaveProgressRequest request)
     {
         var lesson = await GetAccessibleLessonAsync(userId, lessonId);
         var progress = await _progressRepository.GetByUserAndLessonAsync(userId, lessonId);
@@ -73,7 +73,7 @@ public class ProgressService : IProgressService
         return MapToResponse((await _progressRepository.GetByUserAndLessonAsync(userId, lessonId))!);
     }
 
-    public async Task<ProgressResponse> CompleteLessonAsync(int userId, int lessonId)
+    public async Task<ProgressDto> CompleteLessonAsync(int userId, int lessonId)
     {
         var lesson = await GetAccessibleLessonAsync(userId, lessonId);
         var progress = await _progressRepository.GetByUserAndLessonAsync(userId, lessonId);
@@ -143,7 +143,7 @@ public class ProgressService : IProgressService
         await _enrollmentRepository.UpdateAsync(enrollment);
     }
 
-    private static ProgressResponse MapToResponse(UserLessonProgress p) => new()
+    private static ProgressDto MapToResponse(UserLessonProgress p) => new()
     {
         Id = p.Id,
         UserId = p.UserId,

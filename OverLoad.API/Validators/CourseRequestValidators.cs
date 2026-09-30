@@ -1,11 +1,11 @@
 using FluentValidation;
-using OverLoad.Services.DTOs.Request;
+using OverLoad.API.Models.Requests;
 
 namespace OverLoad.API.Validators;
 
-public class CreateCourseRequestValidator : AbstractValidator<CreateCourseRequest>
+public class CreateCourseRequestModelValidator : AbstractValidator<CreateCourseRequestModel>
 {
-    public CreateCourseRequestValidator()
+    public CreateCourseRequestModelValidator()
     {
         RuleFor(x => x.Title).NotEmpty().MaximumLength(300);
         RuleFor(x => x.Description).MaximumLength(2000);
@@ -15,9 +15,9 @@ public class CreateCourseRequestValidator : AbstractValidator<CreateCourseReques
     }
 }
 
-public class UpdateCourseRequestValidator : AbstractValidator<UpdateCourseRequest>
+public class UpdateCourseRequestModelValidator : AbstractValidator<UpdateCourseRequestModel>
 {
-    public UpdateCourseRequestValidator()
+    public UpdateCourseRequestModelValidator()
     {
         RuleFor(x => x.Title).NotEmpty().MaximumLength(300);
         RuleFor(x => x.Description).MaximumLength(2000);

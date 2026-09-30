@@ -1,6 +1,6 @@
 ﻿namespace OverLoad.Services.DTOs.Response;
 
-public class MyCourseResponse
+public class MyCourseDto
 {
     public int CourseId { get; set; }
     public string Title { get; set; } = string.Empty;

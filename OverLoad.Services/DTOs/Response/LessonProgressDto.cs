@@ -1,7 +1,7 @@
 ﻿
 namespace OverLoad.Services.DTOs.Response;
 
-public class LessonProgressResponse
+public class LessonProgressDto
 {
     public int Id { get; set; }
     public string Title { get; set; } = string.Empty;

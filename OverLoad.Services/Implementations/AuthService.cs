@@ -23,7 +23,7 @@ public class AuthService : IAuthService
         _jwtSettings = jwtOptions.Value;
     }
 
-    public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
+    public async Task<AuthResultDto> RegisterAsync(RegisterRequest request)
     {
         var email = request.Email.Trim().ToLowerInvariant();
         if (await _userRepository.EmailExistsAsync(email))
@@ -46,12 +46,14 @@ public class AuthService : IAuthService
         return BuildAuthResponse(created);
     }
 
-    public async Task<AuthResponse> LoginAsync(LoginRequest request)
+    public async Task<AuthResultDto> LoginAsync(LoginRequest request)
     {
         var user = await _userRepository.GetByEmailAsync(request.Email.Trim().ToLowerInvariant());
 
         if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             throw new UnauthorizedException("Email or password is incorrect.");
+
+        EnsureNotLocked(user);
 
         SetRefreshToken(user);
         await _userRepository.UpdateAsync(user);
@@ -59,12 +61,14 @@ public class AuthService : IAuthService
         return BuildAuthResponse(user);
     }
 
-    public async Task<AuthResponse> RefreshTokenAsync(RefreshTokenRequest request)
+    public async Task<AuthResultDto> RefreshTokenAsync(RefreshTokenRequest request)
     {
         var user = await _userRepository.GetByRefreshTokenAsync(request.RefreshToken);
 
         if (user == null || user.RefreshTokenExpiresAt < DateTime.UtcNow)
             throw new UnauthorizedException("Invalid or expired refresh token. Please log in again.");
+
+        EnsureNotLocked(user);
 
         // Rotate refresh token (one-time use)
         SetRefreshToken(user);
@@ -85,13 +89,19 @@ public class AuthService : IAuthService
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
+    private static void EnsureNotLocked(User user)
+    {
+        if (user.IsLocked)
+            throw new ForbiddenException("This account has been locked. Please contact an administrator.");
+    }
+
     private void SetRefreshToken(User user)
     {
         user.RefreshToken = _jwtService.GenerateRefreshToken();
         user.RefreshTokenExpiresAt = DateTime.UtcNow.AddDays(_jwtSettings.RefreshTokenExpiryDays);
     }
 
-    private AuthResponse BuildAuthResponse(User user) => new()
+    private AuthResultDto BuildAuthResponse(User user) => new()
     {
         AccessToken = _jwtService.GenerateAccessToken(user),
         RefreshToken = user.RefreshToken!,

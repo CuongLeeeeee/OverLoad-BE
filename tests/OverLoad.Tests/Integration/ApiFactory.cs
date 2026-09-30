@@ -21,6 +21,7 @@ namespace OverLoad.Tests.Integration;
 public class ApiFactory : WebApplicationFactory<Program>
 {
     private const string JwtSecret = "integration-test-secret-key-at-least-32-bytes";
+    public const string AllowedOrigin = "https://app.overload.test";
     private readonly string _databaseName = Guid.NewGuid().ToString();
 
     public TestData.Seeded Data { get; private set; } = null!;
@@ -35,6 +36,7 @@ public class ApiFactory : WebApplicationFactory<Program>
         // builder is still being set up, which is when the JWT options are read.
         builder.UseSetting("Jwt:SecretKey", JwtSecret);
         builder.UseSetting("ConnectionStrings:DefaultConnection", "unused");
+        builder.UseSetting("Cors:AllowedOrigins:0", AllowedOrigin);
 
         builder.ConfigureServices(services =>
         {

@@ -2,9 +2,9 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OverLoad.API.Common;
-using OverLoad.Services.Common;
-using OverLoad.Services.DTOs.Request;
-using OverLoad.Services.DTOs.Response;
+using OverLoad.API.Models.Mappings;
+using OverLoad.API.Models.Requests;
+using OverLoad.API.Models.Responses;
 using OverLoad.Services.Interfaces;
 
 namespace OverLoad.API.Controllers;
@@ -25,8 +25,12 @@ public class ProgressController : ControllerBase
     public ProgressController(IProgressService progressService)
         => _progressService = progressService;
 
-    /// <summary>Paginated progress records, filterable by userId, lessonId and completed.</summary>
+    /// <summary>Paginated progress records, filterable by userId, lessonId and completed. SortBy: watchTime, scroll, completedAt, createdAt.</summary>
     [HttpGet]
-    public async Task<ActionResult<ApiResponse<PagedResult<ProgressResponse>>>> GetAll([FromQuery] ProgressQueryParams query)
-        => Ok(ApiResponse<PagedResult<ProgressResponse>>.Ok(await _progressService.GetAllAsync(query)));
+    public async Task<ActionResult<ApiResponse<PagedResponseModel<ProgressResponseModel>>>> GetAll(
+        [FromQuery] ProgressQueryRequestModel query)
+    {
+        var page = await _progressService.GetAllAsync(query.ToServiceDto());
+        return Ok(ApiResponse<PagedResponseModel<ProgressResponseModel>>.Ok(page.ToResponseModel(p => p.ToResponseModel())));
+    }
 }

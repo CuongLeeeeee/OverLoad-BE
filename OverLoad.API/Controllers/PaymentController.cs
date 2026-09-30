@@ -3,8 +3,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OverLoad.API.Common;
 using OverLoad.API.Extensions;
-using OverLoad.Services.DTOs.Request;
-using OverLoad.Services.DTOs.Response;
+using OverLoad.API.Models.Mappings;
+using OverLoad.API.Models.Requests;
+using OverLoad.API.Models.Responses;
 using OverLoad.Services.Interfaces;
 using PayOS;
 using PayOS.Models.Webhooks;
@@ -50,9 +51,11 @@ public class PaymentController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
-    public async Task<ActionResult<ApiResponse<CheckoutResponse>>> Checkout([FromBody] CheckoutRequest request)
-        => Ok(ApiResponse<CheckoutResponse>.Ok(
-            await _paymentService.CheckoutAsync(User.GetUserId(), request), "Payment link created."));
+    public async Task<ActionResult<ApiResponse<CheckoutResponseModel>>> Checkout([FromBody] CheckoutRequestModel request)
+    {
+        var checkout = await _paymentService.CheckoutAsync(User.GetUserId(), request.ToServiceDto());
+        return Ok(ApiResponse<CheckoutResponseModel>.Ok(checkout.ToResponseModel(), "Payment link created."));
+    }
 
     /// <summary>
     /// Status of one of your orders — call it from the PayOS return page. A pending order is
@@ -61,8 +64,11 @@ public class PaymentController : ControllerBase
     [HttpGet("orders/{orderCode:long}")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ApiResponse<TransactionResponse>>> GetOrder(long orderCode)
-        => Ok(ApiResponse<TransactionResponse>.Ok(await _paymentService.GetMyOrderAsync(User.GetUserId(), orderCode)));
+    public async Task<ActionResult<ApiResponse<TransactionResponseModel>>> GetOrder(long orderCode)
+    {
+        var order = await _paymentService.GetMyOrderAsync(User.GetUserId(), orderCode);
+        return Ok(ApiResponse<TransactionResponseModel>.Ok(order.ToResponseModel()));
+    }
 
     /// <summary>PayOS webhook. The signature is verified before anything is applied.</summary>
     /// <remarks>

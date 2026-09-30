@@ -33,13 +33,13 @@ public class WalletService : IWalletService
         _settings = settings.Value;
     }
 
-    public async Task<WalletResponse> GetWalletAsync(int userId)
+    public async Task<WalletDto> GetWalletAsync(int userId)
     {
         await _paymentService.SyncPendingAsync(userId);
         return MapToResponse(await GetUserAsync(userId));
     }
 
-    public async Task<WalletResponse> PurchaseProAsync(int userId, ProPackage package)
+    public async Task<WalletDto> PurchaseProAsync(int userId, ProPackage package)
     {
         // Credit deposits that were paid but whose webhook has not arrived yet.
         await _paymentService.SyncPendingAsync(userId);
@@ -88,7 +88,7 @@ public class WalletService : IWalletService
     private async Task<User> GetUserAsync(int userId)
         => await _userRepository.GetByIdAsync(userId) ?? throw new NotFoundException("User", userId);
 
-    private static WalletResponse MapToResponse(User user) => new()
+    private static WalletDto MapToResponse(User user) => new()
     {
         Balance = user.WalletBalance,
         IsPro = user.HasActivePro(DateTime.UtcNow),

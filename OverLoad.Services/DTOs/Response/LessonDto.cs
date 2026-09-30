@@ -1,6 +1,6 @@
 namespace OverLoad.Services.DTOs.Response;
 
-public class LessonResponse
+public class LessonDto
 {
     public int Id { get; set; }
     public int CourseId { get; set; }

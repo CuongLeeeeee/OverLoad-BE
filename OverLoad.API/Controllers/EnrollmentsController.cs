@@ -2,16 +2,16 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OverLoad.API.Common;
-using OverLoad.Services.Common;
-using OverLoad.Services.DTOs.Request;
-using OverLoad.Services.DTOs.Response;
+using OverLoad.API.Models.Mappings;
+using OverLoad.API.Models.Requests;
+using OverLoad.API.Models.Responses;
 using OverLoad.Services.Interfaces;
 
 namespace OverLoad.API.Controllers;
 
 /// <summary>
-/// Enrollment administration. Learners enroll through POST /courses/{id}/enroll (free courses)
-/// or the payment flow, and read their own enrollments through /me/courses.
+/// Enrollment administration. Learners enroll through POST /courses/{id}/enroll or the payment
+/// flow, and read their own enrollments through /me/courses.
 /// </summary>
 [ApiController]
 [ApiVersion("1.0")]
@@ -25,16 +25,23 @@ public class EnrollmentsController : ControllerBase
     public EnrollmentsController(IEnrollmentService enrollmentService)
         => _enrollmentService = enrollmentService;
 
-    /// <summary>Paginated list of enrollments, filterable by userId and courseId.</summary>
+    /// <summary>Paginated enrollments, filterable by userId and courseId. SortBy: enrolledAt, progress.</summary>
     [HttpGet]
-    public async Task<ActionResult<ApiResponse<PagedResult<EnrollmentResponse>>>> GetAll([FromQuery] EnrollmentQueryParams query)
-        => Ok(ApiResponse<PagedResult<EnrollmentResponse>>.Ok(await _enrollmentService.GetAllAsync(query)));
+    public async Task<ActionResult<ApiResponse<PagedResponseModel<EnrollmentResponseModel>>>> GetAll(
+        [FromQuery] EnrollmentQueryRequestModel query)
+    {
+        var page = await _enrollmentService.GetAllAsync(query.ToServiceDto());
+        return Ok(ApiResponse<PagedResponseModel<EnrollmentResponseModel>>.Ok(page.ToResponseModel(e => e.ToResponseModel())));
+    }
 
     /// <summary>A single enrollment.</summary>
     [HttpGet("{id:int}")]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ApiResponse<EnrollmentResponse>>> GetById(int id)
-        => Ok(ApiResponse<EnrollmentResponse>.Ok(await _enrollmentService.GetByIdAsync(id)));
+    public async Task<ActionResult<ApiResponse<EnrollmentResponseModel>>> GetById(int id)
+    {
+        var enrollment = await _enrollmentService.GetByIdAsync(id);
+        return Ok(ApiResponse<EnrollmentResponseModel>.Ok(enrollment.ToResponseModel()));
+    }
 
     /// <summary>Grant a user access to any course, bypassing payment (Admin only).</summary>
     [HttpPost]
@@ -42,11 +49,11 @@ public class EnrollmentsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<ApiResponse<EnrollmentResponse>>> Grant([FromBody] CreateEnrollmentRequest request)
+    public async Task<ActionResult<ApiResponse<EnrollmentResponseModel>>> Grant([FromBody] GrantEnrollmentRequestModel request)
     {
-        var created = await _enrollmentService.GrantAsync(request);
+        var created = await _enrollmentService.GrantAsync(request.ToServiceDto());
         return CreatedAtAction(nameof(GetById), new { id = created.Id },
-            ApiResponse<EnrollmentResponse>.Ok(created, "Enrollment granted."));
+            ApiResponse<EnrollmentResponseModel>.Ok(created.ToResponseModel(), "Enrollment granted."));
     }
 
     /// <summary>Remove an enrollment (Admin only).</summary>

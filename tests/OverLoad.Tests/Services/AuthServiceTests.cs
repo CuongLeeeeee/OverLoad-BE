@@ -65,6 +65,38 @@ public class AuthServiceTests
     }
 
     [Fact]
+    public async Task LoginAsync_Should_Refuse_Locked_Account()
+    {
+        await using var context = TestData.CreateContext();
+        var data = await TestData.SeedAsync(context);
+        data.Student.IsLocked = true;
+        await context.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<ForbiddenException>(() => CreateService(context).LoginAsync(
+            new LoginRequest { Email = "student@test.io", Password = TestData.Password }));
+    }
+
+    [Fact]
+    public async Task Locking_Should_Revoke_Refresh_Token_And_Unlocking_Allows_Login_Again()
+    {
+        await using var context = TestData.CreateContext();
+        var data = await TestData.SeedAsync(context);
+        var auth = CreateService(context);
+        var users = new UserService(new UserRepository(context));
+        var login = await auth.LoginAsync(new LoginRequest { Email = "student@test.io", Password = TestData.Password });
+
+        var locked = await users.SetLockedAsync(data.Student.Id, locked: true);
+
+        Assert.True(locked.IsLocked);
+        await Assert.ThrowsAsync<UnauthorizedException>(
+            () => auth.RefreshTokenAsync(new RefreshTokenRequest { RefreshToken = login.RefreshToken }));
+
+        await users.SetLockedAsync(data.Student.Id, locked: false);
+        var again = await auth.LoginAsync(new LoginRequest { Email = "student@test.io", Password = TestData.Password });
+        Assert.False(again.User.IsLocked);
+    }
+
+    [Fact]
     public async Task RefreshTokenAsync_Should_Rotate_Token_And_Reject_The_Old_One()
     {
         await using var context = TestData.CreateContext();

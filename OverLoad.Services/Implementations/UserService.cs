@@ -17,16 +17,16 @@ public class UserService : IUserService
         _userRepository = userRepository;
     }
 
-    public async Task<PagedResult<UserResponse>> GetAllAsync(UserQueryParams query)
+    public async Task<PagedResult<UserDto>> GetAllAsync(UserQueryParams query)
     {
         var (sortBy, sortDesc) = query.ParseSort();
         var (items, total) = await _userRepository.SearchAsync(
             query.Search, query.Role?.ToString(), query.PageNumber, query.PageSize, sortBy, sortDesc);
 
-        return PagedResult<UserResponse>.Create(items.Select(MapToResponse), total, query);
+        return PagedResult<UserDto>.Create(items.Select(MapToResponse), total, query);
     }
 
-    public async Task<UserDetailResponse> GetByIdAsync(int id)
+    public async Task<UserDetailDto> GetByIdAsync(int id)
     {
         var user = await _userRepository.GetWithEnrollmentsAsync(id)
             ?? throw new NotFoundException("User", id);
@@ -34,7 +34,7 @@ public class UserService : IUserService
         return MapToDetailResponse(user);
     }
 
-    public async Task<UserResponse> CreateAsync(CreateUserRequest request)
+    public async Task<UserDto> CreateAsync(CreateUserRequest request)
     {
         if (await _userRepository.EmailExistsAsync(request.Email.Trim().ToLowerInvariant()))
             throw new ConflictException("An account with this email already exists.");
@@ -54,7 +54,7 @@ public class UserService : IUserService
         return MapToResponse(created);
     }
 
-    public async Task<UserResponse> UpdateAsync(int id, UpdateUserRequest request)
+    public async Task<UserDto> UpdateAsync(int id, UpdateUserRequest request)
     {
         var user = await _userRepository.GetByIdAsync(id)
             ?? throw new NotFoundException("User", id);
@@ -69,7 +69,7 @@ public class UserService : IUserService
         return MapToResponse(user);
     }
 
-    public async Task<UserResponse> UpdateProfileAsync(int id, UpdateProfileRequest request)
+    public async Task<UserDto> UpdateProfileAsync(int id, UpdateProfileRequest request)
     {
         var user = await _userRepository.GetByIdAsync(id)
             ?? throw new NotFoundException("User", id);
@@ -77,6 +77,24 @@ public class UserService : IUserService
         user.FullName = request.FullName.Trim();
         user.AvatarUrl = request.AvatarUrl;
         user.Bio = request.Bio;
+
+        await _userRepository.UpdateAsync(user);
+        return MapToResponse(user);
+    }
+
+    public async Task<UserDto> SetLockedAsync(int id, bool locked)
+    {
+        var user = await _userRepository.GetByIdAsync(id)
+            ?? throw new NotFoundException("User", id);
+
+        user.IsLocked = locked;
+        if (locked)
+        {
+            // Sign-in and refresh are refused from now on; an access token already issued stays
+            // valid until it expires (Jwt:AccessTokenExpiryMinutes).
+            user.RefreshToken = null;
+            user.RefreshTokenExpiresAt = null;
+        }
 
         await _userRepository.UpdateAsync(user);
         return MapToResponse(user);
@@ -92,7 +110,7 @@ public class UserService : IUserService
 
     // ── Mapping helpers ──────────────────────────────────────────────────────
 
-    internal static UserResponse MapToResponse(User user) => new()
+    internal static UserDto MapToResponse(User user) => new()
     {
         Id = user.Id,
         Email = user.Email,
@@ -101,13 +119,14 @@ public class UserService : IUserService
         Bio = user.Bio,
         Role = user.Role.ToString(),
         IsVerified = user.IsVerified,
+        IsLocked = user.IsLocked,
         IsPro = user.HasActivePro(DateTime.UtcNow),
         ProExpiresAt = user.ProExpiresAt,
         CreatedAt = user.CreatedAt,
         UpdatedAt = user.UpdatedAt
     };
 
-    private static UserDetailResponse MapToDetailResponse(User user) => new()
+    private static UserDetailDto MapToDetailResponse(User user) => new()
     {
         Id = user.Id,
         Email = user.Email,
@@ -116,11 +135,12 @@ public class UserService : IUserService
         Bio = user.Bio,
         Role = user.Role.ToString(),
         IsVerified = user.IsVerified,
+        IsLocked = user.IsLocked,
         IsPro = user.HasActivePro(DateTime.UtcNow),
         ProExpiresAt = user.ProExpiresAt,
         CreatedAt = user.CreatedAt,
         UpdatedAt = user.UpdatedAt,
-        Enrollments = user.Enrollments.Select(e => new EnrollmentSummaryResponse
+        Enrollments = user.Enrollments.Select(e => new EnrollmentSummaryDto
         {
             CourseId = e.CourseId,
             CourseTitle = e.Course?.Title ?? string.Empty,

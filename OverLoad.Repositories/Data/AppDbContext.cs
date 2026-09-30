@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<Enrollment> Enrollments => Set<Enrollment>();
     public DbSet<UserLessonProgress> UserLessonProgresses => Set<UserLessonProgress>();
     public DbSet<Transaction> Transactions => Set<Transaction>();
+    public DbSet<BugReport> BugReports => Set<BugReport>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -24,6 +25,7 @@ public class AppDbContext : DbContext
         modelBuilder.ApplyConfiguration(new EnrollmentConfiguration());
         modelBuilder.ApplyConfiguration(new UserLessonProgressConfiguration());
         modelBuilder.ApplyConfiguration(new TransactionConfiguration());
+        modelBuilder.ApplyConfiguration(new BugReportConfiguration());
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

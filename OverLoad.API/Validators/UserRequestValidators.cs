@@ -1,11 +1,11 @@
 using FluentValidation;
-using OverLoad.Services.DTOs.Request;
+using OverLoad.API.Models.Requests;
 
 namespace OverLoad.API.Validators;
 
-public class CreateUserRequestValidator : AbstractValidator<CreateUserRequest>
+public class CreateUserRequestModelValidator : AbstractValidator<CreateUserRequestModel>
 {
-    public CreateUserRequestValidator()
+    public CreateUserRequestModelValidator()
     {
         RuleFor(x => x.Email).NotEmpty().EmailAddress().MaximumLength(256);
         RuleFor(x => x.Password).NotEmpty().MinimumLength(6).MaximumLength(100);
@@ -16,9 +16,9 @@ public class CreateUserRequestValidator : AbstractValidator<CreateUserRequest>
     }
 }
 
-public class UpdateUserRequestValidator : AbstractValidator<UpdateUserRequest>
+public class UpdateUserRequestModelValidator : AbstractValidator<UpdateUserRequestModel>
 {
-    public UpdateUserRequestValidator()
+    public UpdateUserRequestModelValidator()
     {
         RuleFor(x => x.FullName).NotEmpty().MaximumLength(200);
         RuleFor(x => x.AvatarUrl).MaximumLength(500);
@@ -27,9 +27,9 @@ public class UpdateUserRequestValidator : AbstractValidator<UpdateUserRequest>
     }
 }
 
-public class UpdateProfileRequestValidator : AbstractValidator<UpdateProfileRequest>
+public class UpdateProfileRequestModelValidator : AbstractValidator<UpdateProfileRequestModel>
 {
-    public UpdateProfileRequestValidator()
+    public UpdateProfileRequestModelValidator()
     {
         RuleFor(x => x.FullName).NotEmpty().MaximumLength(200);
         RuleFor(x => x.AvatarUrl).MaximumLength(500);

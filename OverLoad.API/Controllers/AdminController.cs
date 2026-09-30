@@ -2,9 +2,9 @@ using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OverLoad.API.Common;
-using OverLoad.Services.Common;
-using OverLoad.Services.DTOs.Request;
-using OverLoad.Services.DTOs.Response;
+using OverLoad.API.Models.Mappings;
+using OverLoad.API.Models.Requests;
+using OverLoad.API.Models.Responses;
 using OverLoad.Services.Interfaces;
 
 namespace OverLoad.API.Controllers;
@@ -21,14 +21,20 @@ public class AdminController : ControllerBase
 
     public AdminController(IPaymentService paymentService) => _paymentService = paymentService;
 
-    /// <summary>All transactions, filterable by userId, type and status.</summary>
+    /// <summary>All transactions, filterable by userId, type and status. SortBy: createdAt, amount.</summary>
     [HttpGet("transactions")]
-    public async Task<ActionResult<ApiResponse<PagedResult<TransactionResponse>>>> GetTransactions(
-        [FromQuery] TransactionQueryParams query)
-        => Ok(ApiResponse<PagedResult<TransactionResponse>>.Ok(await _paymentService.GetAllTransactionsAsync(query)));
+    public async Task<ActionResult<ApiResponse<PagedResponseModel<TransactionResponseModel>>>> GetTransactions(
+        [FromQuery] TransactionQueryRequestModel query)
+    {
+        var page = await _paymentService.GetAllTransactionsAsync(query.ToServiceDto());
+        return Ok(ApiResponse<PagedResponseModel<TransactionResponseModel>>.Ok(page.ToResponseModel(t => t.ToResponseModel())));
+    }
 
     /// <summary>Revenue received through PayOS, sales counts and outstanding wallet balances.</summary>
     [HttpGet("revenue-stats")]
-    public async Task<ActionResult<ApiResponse<RevenueStatsResponse>>> GetRevenueStats()
-        => Ok(ApiResponse<RevenueStatsResponse>.Ok(await _paymentService.GetRevenueStatsAsync()));
+    public async Task<ActionResult<ApiResponse<RevenueStatsResponseModel>>> GetRevenueStats()
+    {
+        var stats = await _paymentService.GetRevenueStatsAsync();
+        return Ok(ApiResponse<RevenueStatsResponseModel>.Ok(stats.ToResponseModel()));
+    }
 }

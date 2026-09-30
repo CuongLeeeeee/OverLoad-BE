@@ -1,0 +1,43 @@
+# Local development stack: the API plus its own SQL Server.
+#   cp .env.example .env   (then fill in the values)
+#   docker compose up --build
+# API: http://localhost:8080 (Swagger at the root), SQL Server: localhost,1433
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: overload-db
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${DB_SA_PASSWORD:?Set DB_SA_PASSWORD in .env}
+    ports:
+      - "1433:1433"
+    volumes:
+      - overload-db-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q \"SELECT 1\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  api:
+    build: .
+    container_name: overload-api
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development          # enables Swagger and migrate-on-startup
+      ConnectionStrings__DefaultConnection: "Server=db,1433;Database=OverLoadDb;User Id=sa;Password=${DB_SA_PASSWORD};TrustServerCertificate=True;"
+      Jwt__SecretKey: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env}
+      Gemini__ApiKey: ${GEMINI_API_KEY:-}
+      PayOS__ClientId: ${PAYOS_CLIENT_ID:-}
+      PayOS__ApiKey: ${PAYOS_API_KEY:-}
+      PayOS__ChecksumKey: ${PAYOS_CHECKSUM_KEY:-}
+      Payment__FrontendBaseUrl: ${FRONTEND_BASE_URL:-http://localhost:3000}
+      Cors__AllowedOrigins__0: ${FRONTEND_BASE_URL:-http://localhost:3000}
+
+volumes:
+  overload-db-data:

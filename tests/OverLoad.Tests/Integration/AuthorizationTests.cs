@@ -88,6 +88,19 @@ public class AuthorizationTests : IClassFixture<ApiFactory>, IAsyncLifetime
     }
 
     [Fact]
+    public async Task Admin_Cannot_Lock_Own_Account_And_Students_Cannot_Lock_Anyone()
+    {
+        var admin = _factory.CreateClientFor(_factory.Data.Admin);
+        var student = _factory.CreateClientFor(_factory.Data.Student);
+
+        var self = await admin.PostAsync($"/api/v1/users/{_factory.Data.Admin.Id}/lock", null);
+        var byStudent = await student.PostAsync($"/api/v1/users/{_factory.Data.Instructor.Id}/lock", null);
+
+        Assert.Equal(HttpStatusCode.BadRequest, self.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, byStudent.StatusCode);
+    }
+
+    [Fact]
     public async Task Anonymous_Course_List_Should_Not_Include_Drafts()
     {
         var body = await _factory.CreateClient().GetFromJsonAsync<JsonElement>("/api/v1/courses?isPublished=false");
@@ -161,6 +174,20 @@ public class AuthorizationTests : IClassFixture<ApiFactory>, IAsyncLifetime
 
         Assert.Contains("/api/v1/me/lessons/{lessonId}/progress", document.Paths.Keys);
         Assert.DoesNotContain(document.Paths.Keys, path => path.Contains("{version}"));
+    }
+
+    [Theory]
+    [InlineData(ApiFactory.AllowedOrigin, true)]
+    [InlineData("https://evil.example", false)]
+    public async Task Cors_Should_Only_Allow_Configured_Origins(string origin, bool allowed)
+    {
+        var preflight = new HttpRequestMessage(HttpMethod.Options, "/api/v1/courses");
+        preflight.Headers.Add("Origin", origin);
+        preflight.Headers.Add("Access-Control-Request-Method", "GET");
+
+        var response = await _factory.CreateClient().SendAsync(preflight);
+
+        Assert.Equal(allowed, response.Headers.Contains("Access-Control-Allow-Origin"));
     }
 
     [Fact]

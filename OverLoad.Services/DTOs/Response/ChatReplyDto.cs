@@ -1,6 +1,6 @@
 ﻿namespace OverLoad.Services.DTOs.Response;
 
-public class ChatResponse
+public class ChatReplyDto
 {
     public string Reply { get; set; } = string.Empty;
     public bool IsBlocked { get; set; } = false;

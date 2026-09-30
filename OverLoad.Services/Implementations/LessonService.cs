@@ -27,17 +27,17 @@ public class LessonService : ILessonService
         _courseAccess = courseAccess;
     }
 
-    public async Task<PagedResult<LessonResponse>> GetAllAsync(LessonQueryParams query)
+    public async Task<PagedResult<LessonDto>> GetAllAsync(LessonQueryParams query)
     {
         var (sortBy, sortDesc) = query.ParseSort();
         var (items, total) = await _lessonRepository.SearchAsync(
             query.CourseId, query.Search, query.IsFree,
             query.PageNumber, query.PageSize, sortBy, sortDesc);
 
-        return PagedResult<LessonResponse>.Create(items.Select(MapToResponse), total, query);
+        return PagedResult<LessonDto>.Create(items.Select(MapToResponse), total, query);
     }
 
-    public async Task<LessonResponse> GetByIdAsync(int id, int? userId, bool isStaff)
+    public async Task<LessonDto> GetByIdAsync(int id, int? userId, bool isStaff)
     {
         var lesson = await _lessonRepository.GetWithCourseAsync(id);
         if (lesson == null || (!lesson.Course.IsPublished && !isStaff))
@@ -55,7 +55,7 @@ public class LessonService : ILessonService
         return MapToResponse(lesson);
     }
 
-    public async Task<List<LessonProgressResponse>> GetByCourseIdWithProgressAsync(int courseId, int? userId, bool isStaff)
+    public async Task<List<LessonProgressDto>> GetByCourseIdWithProgressAsync(int courseId, int? userId, bool isStaff)
     {
         var course = await _courseRepository.GetByIdAsync(courseId);
         if (course == null || (!course.IsPublished && !isStaff))
@@ -94,7 +94,7 @@ public class LessonService : ILessonService
                     0, 100)
                 : 0;
 
-            return new LessonProgressResponse
+            return new LessonProgressDto
             {
                 Id = lesson.Id,
                 Title = lesson.Title,
@@ -109,7 +109,7 @@ public class LessonService : ILessonService
         }).ToList();
     }
 
-    public async Task<LessonResponse> CreateAsync(CreateLessonRequest request)
+    public async Task<LessonDto> CreateAsync(CreateLessonRequest request)
     {
         var course = await _courseRepository.GetByIdAsync(request.CourseId)
             ?? throw new NotFoundException("Course", request.CourseId);
@@ -132,7 +132,7 @@ public class LessonService : ILessonService
         return MapToResponse(created);
     }
 
-    public async Task<LessonResponse> UpdateAsync(int id, UpdateLessonRequest request)
+    public async Task<LessonDto> UpdateAsync(int id, UpdateLessonRequest request)
     {
         var lesson = await _lessonRepository.GetWithCourseAsync(id)
             ?? throw new NotFoundException("Lesson", id);
@@ -172,7 +172,7 @@ public class LessonService : ILessonService
         await _courseRepository.UpdateAsync(course);
     }
 
-    private static LessonResponse MapToResponse(Lesson l) => new()
+    private static LessonDto MapToResponse(Lesson l) => new()
     {
         Id = l.Id,
         CourseId = l.CourseId,

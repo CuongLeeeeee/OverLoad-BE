@@ -5,5 +5,5 @@ namespace OverLoad.Services.Interfaces;
 
 public interface IChatService
 {
-    Task<ChatResponse> SendMessageAsync(ChatRequest request);
+    Task<ChatReplyDto> SendMessageAsync(ChatRequest request);
 }

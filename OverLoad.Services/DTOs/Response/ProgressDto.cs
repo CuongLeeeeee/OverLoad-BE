@@ -1,7 +1,7 @@
-// OverLoad.Services/DTOs/Response/ProgressResponse.cs
+// OverLoad.Services/DTOs/Response/ProgressDto.cs
 namespace OverLoad.Services.DTOs.Response;
 
-public class ProgressResponse
+public class ProgressDto
 {
     public int Id { get; set; }
     public int UserId { get; set; }

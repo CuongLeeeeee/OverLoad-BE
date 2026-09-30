@@ -1,11 +1,11 @@
 using FluentValidation;
-using OverLoad.Services.DTOs.Request;
+using OverLoad.API.Models.Requests;
 
 namespace OverLoad.API.Validators;
 
-public class ChatRequestValidator : AbstractValidator<ChatRequest>
+public class ChatRequestModelValidator : AbstractValidator<ChatRequestModel>
 {
-    public ChatRequestValidator()
+    public ChatRequestModelValidator()
     {
         RuleFor(x => x.Message).NotEmpty().MaximumLength(4000);
         RuleForEach(x => x.RecentHistory).ChildRules(item =>

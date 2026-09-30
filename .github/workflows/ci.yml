@@ -37,3 +37,16 @@ jobs:
         with:
           name: test-results
           path: '**/TestResults/*.trx'
+
+  docker-build:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Build only (no push) so a broken Dockerfile fails the PR instead of the deploy.
+      - name: Build image
+        run: docker build -t overload-api:ci .
