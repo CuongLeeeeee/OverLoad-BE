@@ -9,7 +9,10 @@ public class CourseDto
     public string? ThumbnailUrl { get; set; }
     public string? Category { get; set; }
     public string Level { get; set; } = string.Empty;
-    public bool IsPublished { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public bool IsPublished => Status == "Published";
+    public string? RejectionReason { get; set; }
+    public int InstructorId { get; set; }
     public int TotalDurationMinutes { get; set; }
     public int TotalLessons { get; set; }
     public DateTime CreatedAt { get; set; }

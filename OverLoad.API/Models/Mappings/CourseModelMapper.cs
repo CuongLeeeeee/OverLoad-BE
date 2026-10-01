@@ -13,8 +13,7 @@ public static class CourseModelMapper
         Description = model.Description,
         ThumbnailUrl = model.ThumbnailUrl,
         Category = model.Category,
-        Level = model.Level,
-        IsPublished = model.IsPublished
+        Level = model.Level
     };
 
     public static UpdateCourseRequest ToServiceDto(this UpdateCourseRequestModel model) => new()
@@ -23,8 +22,7 @@ public static class CourseModelMapper
         Description = model.Description,
         ThumbnailUrl = model.ThumbnailUrl,
         Category = model.Category,
-        Level = model.Level,
-        IsPublished = model.IsPublished
+        Level = model.Level
     };
 
     public static CourseQueryParams ToServiceDto(this CourseQueryRequestModel model) => new CourseQueryParams
@@ -61,7 +59,10 @@ public static class CourseModelMapper
         model.ThumbnailUrl = dto.ThumbnailUrl;
         model.Category = dto.Category;
         model.Level = dto.Level;
+        model.Status = dto.Status;
         model.IsPublished = dto.IsPublished;
+        model.RejectionReason = dto.RejectionReason;
+        model.InstructorId = dto.InstructorId;
         model.TotalDurationMinutes = dto.TotalDurationMinutes;
         model.TotalLessons = dto.TotalLessons;
         model.CreatedAt = dto.CreatedAt;

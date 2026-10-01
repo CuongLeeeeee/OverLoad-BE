@@ -109,10 +109,13 @@ public class LessonService : ILessonService
         }).ToList();
     }
 
-    public async Task<LessonDto> CreateAsync(CreateLessonRequest request)
+    public async Task<LessonDto> CreateAsync(CreateLessonRequest request, int callerId, bool isAdmin)
     {
         var course = await _courseRepository.GetByIdAsync(request.CourseId)
             ?? throw new NotFoundException("Course", request.CourseId);
+
+        if (!isAdmin && course.InstructorId != callerId)
+            throw new ForbiddenException("You do not own this course.");
 
         var lesson = new Lesson
         {
@@ -132,10 +135,13 @@ public class LessonService : ILessonService
         return MapToResponse(created);
     }
 
-    public async Task<LessonDto> UpdateAsync(int id, UpdateLessonRequest request)
+    public async Task<LessonDto> UpdateAsync(int id, UpdateLessonRequest request, int callerId, bool isAdmin)
     {
         var lesson = await _lessonRepository.GetWithCourseAsync(id)
             ?? throw new NotFoundException("Lesson", id);
+
+        if (!isAdmin && lesson.Course.InstructorId != callerId)
+            throw new ForbiddenException("You do not own this course.");
 
         lesson.Title = request.Title.Trim();
         lesson.Description = request.Description;
@@ -150,16 +156,23 @@ public class LessonService : ILessonService
         return MapToResponse(lesson);
     }
 
-    public async Task DeleteAsync(int id)
+    public async Task DeleteAsync(int id, int callerId, bool isAdmin)
     {
         var lesson = await _lessonRepository.GetByIdAsync(id)
             ?? throw new NotFoundException("Lesson", id);
 
+        if (!isAdmin)
+        {
+            var course = await _courseRepository.GetByIdAsync(lesson.CourseId);
+            if (course != null && course.InstructorId != callerId)
+                throw new ForbiddenException("You do not own this course.");
+        }
+
         var courseId = lesson.CourseId;
         await _lessonRepository.DeleteAsync(id);
 
-        var course = await _courseRepository.GetByIdAsync(courseId);
-        if (course != null) await SyncCourseTotalsAsync(course);
+        var courseForTotals = await _courseRepository.GetByIdAsync(courseId);
+        if (courseForTotals != null) await SyncCourseTotalsAsync(courseForTotals);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

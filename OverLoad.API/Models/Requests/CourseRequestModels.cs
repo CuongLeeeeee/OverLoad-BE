@@ -9,7 +9,7 @@ public class CreateCourseRequestModel
     public string? ThumbnailUrl { get; set; }
     public string? Category { get; set; }
     public CourseLevel Level { get; set; } = CourseLevel.Beginner;
-    public bool IsPublished { get; set; }
+    // Courses always start as Draft; no IsPublished flag
 }
 
 public class UpdateCourseRequestModel
@@ -19,7 +19,17 @@ public class UpdateCourseRequestModel
     public string? ThumbnailUrl { get; set; }
     public string? Category { get; set; }
     public CourseLevel Level { get; set; } = CourseLevel.Beginner;
-    public bool IsPublished { get; set; }
+    // Status changes go through /submit, /approve, /reject
+}
+
+public class RejectCourseRequestModel
+{
+    public string Reason { get; set; } = string.Empty;
+}
+
+public class SetCoursePriceRequestModel
+{
+    public decimal Price { get; set; }
 }
 
 public class CourseQueryRequestModel : PagedQueryRequestModel

@@ -83,7 +83,7 @@ public class EnrollmentService : IEnrollmentService
     {
         var enrollments = await _enrollmentRepository.GetByUserIdWithDetailsAsync(userId);
 
-        return enrollments.Select(e =>
+        return enrollments.Where(e => e.Course?.IsPublished == true).Select(e =>
         {
             var totalLessons = e.Course?.Lessons?.Count ?? 0;
             var completedLessons = totalLessons > 0

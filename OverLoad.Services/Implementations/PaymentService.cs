@@ -270,8 +270,8 @@ public class PaymentService : IPaymentService
         return new RevenueStatsDto
         {
             TotalRevenue = Sum(t => t.Method == PaymentMethod.PayOS),
-            CourseRevenue = Sum(t => t.Method == PaymentMethod.PayOS && t.Type == TransactionType.CoursePurchase),
-            ProRevenue = Sum(t => t.Method == PaymentMethod.PayOS && t.Type == TransactionType.ProUpgrade),
+            CourseRevenue = Sum(t => t.Type == TransactionType.CoursePurchase),
+            ProRevenue = Sum(t => t.Type == TransactionType.ProUpgrade),
             DepositRevenue = Sum(t => t.Type == TransactionType.Deposit),
             CoursesSold = Count(t => t.Type == TransactionType.CoursePurchase),
             ProUpgradesSold = Count(t => t.Type == TransactionType.ProUpgrade),

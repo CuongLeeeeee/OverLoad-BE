@@ -30,9 +30,9 @@ public static class TestData
         var instructor = new User { Email = "instructor@test.io", FullName = "Instructor", Role = UserRole.Instructor, PasswordHash = hash };
         var student = new User { Email = "student@test.io", FullName = "Student", Role = UserRole.Student, PasswordHash = hash };
 
-        var freeCourse = new Course { Title = "Free course", Slug = "free-course", IsPublished = true, Price = 0 };
-        var paidCourse = new Course { Title = "Paid course", Slug = "paid-course", IsPublished = true, Price = 199000 };
-        var draftCourse = new Course { Title = "Draft course", Slug = "draft-course", IsPublished = false, Price = 0 };
+        var freeCourse = new Course { Title = "Free course", Slug = "free-course", Status = CourseStatus.Published, Price = 0, InstructorId = 1 };
+        var paidCourse = new Course { Title = "Paid course", Slug = "paid-course", Status = CourseStatus.Published, Price = 199000, InstructorId = 1 };
+        var draftCourse = new Course { Title = "Draft course", Slug = "draft-course", Status = CourseStatus.Draft, Price = 0, InstructorId = 1 };
 
         var paidLessons = new[]
         {

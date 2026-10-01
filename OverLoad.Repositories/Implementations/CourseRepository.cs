@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using OverLoad.Domain.Entities;
+using OverLoad.Domain.Enums;
 using OverLoad.Repositories.Data;
 using OverLoad.Repositories.Interfaces;
 
@@ -25,6 +26,12 @@ public class CourseRepository : BaseRepository<Course>, ICourseRepository
         return await query.AnyAsync();
     }
 
+    public async Task<List<Course>> GetByInstructorAsync(int instructorId)
+        => await _dbSet
+            .Where(c => c.InstructorId == instructorId)
+            .OrderByDescending(c => c.UpdatedAt)
+            .ToListAsync();
+
     public async Task<(IEnumerable<Course> Items, int TotalCount)> SearchAsync(
         string? searchTerm, string? category, string? level, bool? isPublished,
         int page, int pageSize, string? sortBy, bool sortDesc)
@@ -45,7 +52,9 @@ public class CourseRepository : BaseRepository<Course>, ICourseRepository
             query = query.Where(c => c.Level.ToString() == level);
 
         if (isPublished.HasValue)
-            query = query.Where(c => c.IsPublished == isPublished.Value);
+            query = isPublished.Value
+                ? query.Where(c => c.Status == CourseStatus.Published)
+                : query.Where(c => c.Status != CourseStatus.Published);
 
         var total = await query.CountAsync();
 
@@ -61,6 +70,16 @@ public class CourseRepository : BaseRepository<Course>, ICourseRepository
             _                       => query.OrderBy(c => c.CreatedAt)
         };
 
+        var items = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+        return (items, total);
+    }
+
+    public async Task<(IEnumerable<Course> Items, int TotalCount)> GetPendingReviewAsync(int page, int pageSize)
+    {
+        var query = _dbSet
+            .Where(c => c.Status == CourseStatus.PendingReview)
+            .OrderBy(c => c.UpdatedAt);
+        var total = await query.CountAsync();
         var items = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
         return (items, total);
     }

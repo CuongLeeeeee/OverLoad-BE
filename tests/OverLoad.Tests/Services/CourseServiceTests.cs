@@ -52,7 +52,7 @@ public class CourseServiceTests
         await TestData.SeedAsync(context);
         var service = new CourseService(new CourseRepository(context));
 
-        var created = await service.CreateAsync(new CreateCourseRequest { Title = "Free Course" });
+        var created = await service.CreateAsync(new CreateCourseRequest { Title = "Free Course" }, instructorId: 1);
 
         Assert.StartsWith("free-course-", created.Slug);
     }
@@ -64,6 +64,6 @@ public class CourseServiceTests
         var service = new CourseService(new CourseRepository(context));
 
         await Assert.ThrowsAsync<NotFoundException>(
-            () => service.UpdateAsync(999, new UpdateCourseRequest { Title = "x" }));
+            () => service.UpdateAsync(999, new UpdateCourseRequest { Title = "x" }, callerId: 1, isAdmin: true));
     }
 }

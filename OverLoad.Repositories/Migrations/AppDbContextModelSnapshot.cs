@@ -100,8 +100,8 @@ namespace OverLoad.Repositories.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
-                    b.Property<bool>("IsPublished")
-                        .HasColumnType("boolean");
+                    b.Property<int>("InstructorId")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Level")
                         .IsRequired()
@@ -110,10 +110,19 @@ namespace OverLoad.Repositories.Migrations
                     b.Property<decimal>("Price")
                         .HasColumnType("numeric");
 
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
                     b.Property<string>("Slug")
                         .IsRequired()
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<string>("ThumbnailUrl")
                         .HasMaxLength(500)
@@ -134,6 +143,8 @@ namespace OverLoad.Repositories.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("InstructorId");
 
                     b.HasIndex("Slug")
                         .IsUnique();
@@ -474,6 +485,17 @@ namespace OverLoad.Repositories.Migrations
                     b.Navigation("Lesson");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("OverLoad.Domain.Entities.Course", b =>
+                {
+                    b.HasOne("OverLoad.Domain.Entities.User", "Instructor")
+                        .WithMany()
+                        .HasForeignKey("InstructorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Instructor");
                 });
 
             modelBuilder.Entity("OverLoad.Domain.Entities.Enrollment", b =>

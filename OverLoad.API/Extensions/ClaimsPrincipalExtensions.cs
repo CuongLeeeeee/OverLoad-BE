@@ -21,4 +21,6 @@ public static class ClaimsPrincipalExtensions
 
     public static bool IsStaff(this ClaimsPrincipal user) =>
         user.IsInRole(Roles.Admin) || user.IsInRole(Roles.Instructor);
+
+    public static bool IsAdmin(this ClaimsPrincipal user) => user.IsInRole(Roles.Admin);
 }

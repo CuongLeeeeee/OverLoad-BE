@@ -49,35 +49,38 @@ public class LessonsController : ControllerBase
         return Ok(ApiResponse<LessonResponseModel>.Ok(lesson.ToResponseModel()));
     }
 
-    /// <summary>Create a lesson. OrderIndex is assigned as the next free slot.</summary>
+    /// <summary>Create a lesson. Instructors can only add lessons to their own courses.</summary>
     [HttpPost]
     [Authorize(Roles = Roles.Staff)]
     [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ApiResponse<LessonResponseModel>>> Create([FromBody] CreateLessonRequestModel request)
     {
-        var created = await _lessonService.CreateAsync(request.ToServiceDto());
+        var created = await _lessonService.CreateAsync(request.ToServiceDto(), User.GetUserId(), User.IsInRole(Roles.Admin));
         return CreatedAtAction(nameof(GetById), new { id = created.Id },
             ApiResponse<LessonResponseModel>.Ok(created.ToResponseModel(), "Lesson created successfully."));
     }
 
-    /// <summary>Update a lesson, including reordering via OrderIndex.</summary>
+    /// <summary>Update a lesson, including reordering via OrderIndex. Instructors can only edit their own courses' lessons.</summary>
     [HttpPut("{id:int}")]
     [Authorize(Roles = Roles.Staff)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ApiResponse<LessonResponseModel>>> Update(int id, [FromBody] UpdateLessonRequestModel request)
     {
-        var lesson = await _lessonService.UpdateAsync(id, request.ToServiceDto());
+        var lesson = await _lessonService.UpdateAsync(id, request.ToServiceDto(), User.GetUserId(), User.IsInRole(Roles.Admin));
         return Ok(ApiResponse<LessonResponseModel>.Ok(lesson.ToResponseModel(), "Lesson updated successfully."));
     }
 
-    /// <summary>Delete a lesson. Course totals are recalculated.</summary>
+    /// <summary>Delete a lesson. Instructors can only delete lessons from their own courses.</summary>
     [HttpDelete("{id:int}")]
     [Authorize(Roles = Roles.Staff)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ApiResponse<object?>>> Delete(int id)
     {
-        await _lessonService.DeleteAsync(id);
+        await _lessonService.DeleteAsync(id, User.GetUserId(), User.IsInRole(Roles.Admin));
         return Ok(ApiResponse.Ok("Lesson deleted successfully."));
     }
 

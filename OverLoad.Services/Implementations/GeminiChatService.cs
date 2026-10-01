@@ -89,7 +89,7 @@ public class GeminiChatService : IChatService
 
         // ── Bước 4: Gọi Gemini API ────────────────────────────────────────
         if (string.IsNullOrWhiteSpace(_settings.ApiKey))
-            throw new InvalidOperationException("Gemini:ApiKey is not configured.");
+            throw new ExternalServiceException("AI service is not configured. Please contact support.");
 
         var url = $"https://generativelanguage.googleapis.com/v1beta/models/{_settings.Model}:generateContent?key={_settings.ApiKey}";
         using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");

@@ -10,7 +10,7 @@ public class CreateCourseRequest
     public string? ThumbnailUrl { get; set; }
     public string? Category { get; set; }
     public CourseLevel Level { get; set; } = CourseLevel.Beginner;
-    public bool IsPublished { get; set; }
+    // Status is always Draft on creation; no IsPublished flag
 }
 
 public class UpdateCourseRequest
@@ -20,7 +20,7 @@ public class UpdateCourseRequest
     public string? ThumbnailUrl { get; set; }
     public string? Category { get; set; }
     public CourseLevel Level { get; set; } = CourseLevel.Beginner;
-    public bool IsPublished { get; set; }
+    // Status changes go through /submit, /approve, /reject — not via this DTO
 }
 
 public class CourseQueryParams : QueryParameters

@@ -99,34 +99,36 @@ public class CoursesController : ControllerBase
             ApiResponse<EnrollmentResponseModel>.Ok(enrollment.ToResponseModel(), "Enrolled successfully."));
     }
 
-    /// <summary>Create a course. The slug is generated from the title.</summary>
+    /// <summary>Create a course. Always starts as Draft; the slug is generated from the title.</summary>
     [HttpPost]
     [Authorize(Roles = Roles.Staff)]
     [ProducesResponseType(StatusCodes.Status201Created)]
     public async Task<ActionResult<ApiResponse<CourseResponseModel>>> Create([FromBody] CreateCourseRequestModel request)
     {
-        var created = await _courseService.CreateAsync(request.ToServiceDto());
+        var created = await _courseService.CreateAsync(request.ToServiceDto(), User.GetUserId());
         return CreatedAtAction(nameof(GetById), new { id = created.Id },
             ApiResponse<CourseResponseModel>.Ok(created.ToResponseModel(), "Course created successfully."));
     }
 
-    /// <summary>Update a course.</summary>
+    /// <summary>Update a course. Instructors can only edit their own courses in Draft or Rejected state.</summary>
     [HttpPut("{id:int}")]
     [Authorize(Roles = Roles.Staff)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ApiResponse<CourseResponseModel>>> Update(int id, [FromBody] UpdateCourseRequestModel request)
     {
-        var course = await _courseService.UpdateAsync(id, request.ToServiceDto());
+        var course = await _courseService.UpdateAsync(id, request.ToServiceDto(), User.GetUserId(), User.IsInRole(Roles.Admin));
         return Ok(ApiResponse<CourseResponseModel>.Ok(course.ToResponseModel(), "Course updated successfully."));
     }
 
-    /// <summary>Delete a course and all its lessons.</summary>
+    /// <summary>Delete a course and all its lessons. Instructors can only delete their own courses.</summary>
     [HttpDelete("{id:int}")]
     [Authorize(Roles = Roles.Staff)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ApiResponse<object?>>> Delete(int id)
     {
-        await _courseService.DeleteAsync(id);
+        await _courseService.DeleteAsync(id, User.GetUserId(), User.IsInRole(Roles.Admin));
         return Ok(ApiResponse.Ok("Course deleted successfully."));
     }
 }

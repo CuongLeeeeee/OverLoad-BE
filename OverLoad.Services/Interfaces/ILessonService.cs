@@ -15,7 +15,8 @@ public interface ILessonService
     Task<LessonDto> GetByIdAsync(int id, int? userId, bool isStaff);
 
     Task<List<LessonProgressDto>> GetByCourseIdWithProgressAsync(int courseId, int? userId, bool isStaff);
-    Task<LessonDto> CreateAsync(CreateLessonRequest request);
-    Task<LessonDto> UpdateAsync(int id, UpdateLessonRequest request);
-    Task DeleteAsync(int id);
+    /// <summary>callerId/isAdmin are used for ownership check: Instructor can only edit their own courses' lessons.</summary>
+    Task<LessonDto> CreateAsync(CreateLessonRequest request, int callerId, bool isAdmin);
+    Task<LessonDto> UpdateAsync(int id, UpdateLessonRequest request, int callerId, bool isAdmin);
+    Task DeleteAsync(int id, int callerId, bool isAdmin);
 }

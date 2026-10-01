@@ -17,6 +17,16 @@ public class CourseConfiguration : IEntityTypeConfiguration<Course>
         builder.Property(c => c.ThumbnailUrl).HasMaxLength(500);
         builder.Property(c => c.Category).HasMaxLength(100);
         builder.Property(c => c.Level).HasConversion<string>();
+        builder.Property(c => c.Status).HasConversion<string>().HasMaxLength(20);
+        builder.Property(c => c.RejectionReason).HasMaxLength(1000);
+
+        // IsPublished is a computed C# property, not a DB column
+        builder.Ignore(c => c.IsPublished);
+
+        builder.HasOne(c => c.Instructor)
+               .WithMany()
+               .HasForeignKey(c => c.InstructorId)
+               .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasMany(c => c.Lessons)
                .WithOne(l => l.Course)
