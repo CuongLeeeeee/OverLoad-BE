@@ -59,6 +59,7 @@ public static class CourseModelMapper
         model.ThumbnailUrl = dto.ThumbnailUrl;
         model.Category = dto.Category;
         model.Level = dto.Level;
+        model.Price = dto.Price;
         model.Status = dto.Status;
         model.IsPublished = dto.IsPublished;
         model.RejectionReason = dto.RejectionReason;

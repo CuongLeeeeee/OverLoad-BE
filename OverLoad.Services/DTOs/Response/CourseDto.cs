@@ -9,6 +9,7 @@ public class CourseDto
     public string? ThumbnailUrl { get; set; }
     public string? Category { get; set; }
     public string Level { get; set; } = string.Empty;
+    public decimal Price { get; set; }
     public string Status { get; set; } = string.Empty;
     public bool IsPublished => Status == "Published";
     public string? RejectionReason { get; set; }
